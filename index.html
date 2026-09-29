@@ -48,7 +48,6 @@ dialog{border:0;border-radius:28px;background:var(--card);color:var(--tx);width:
 @media(max-width:599px){dialog{margin:auto 0 0;width:100%;border-radius:28px 28px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}}
 #toast{inset:auto 0 calc(100px + env(safe-area-inset-bottom,0px)) 0;margin:0 auto;width:max-content;max-width:90vw;border:0;border-radius:99px;background:var(--tx);color:var(--bg);padding:12px 20px;font-weight:600;font-size:14px;box-shadow:0 12px 30px #0004;animation:pg .25s both}
 nav{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom,0px));max-width:520px;margin:0 auto;display:flex;align-items:center;justify-content:space-around;padding:6px;border-radius:30px;background:color-mix(in srgb,var(--card) 86%,transparent);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--br);box-shadow:0 16px 40px #0000002e;z-index:5}
-nav[hidden]{display:none}
 nav button{flex:1;min-width:0;min-height:56px;background:none;border:0;border-radius:22px;color:var(--mu);font:600 10.5px Inter,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:color .15s,background .15s}
 nav button.on{color:var(--ac);background:color-mix(in srgb,var(--ac) 11%,transparent)}nav .fab{flex:none;width:64px}
 nav .fab .ic{width:52px;height:52px;padding:14px;margin-top:-26px;border-radius:50%;color:#fff;background:linear-gradient(145deg,#12945f,#0b6b4f);box-shadow:0 10px 24px #0b6b4f66,0 0 0 5px var(--bg)}
@@ -61,7 +60,7 @@ nav button{flex:none;width:100%;flex-direction:row;justify-content:flex-start;ga
 nav .fab{order:9;margin-top:10px;color:#fff;background:linear-gradient(145deg,#12945f,#0b6b4f)}nav .fab .ic{width:20px;height:20px;padding:0;margin:0;background:none;box-shadow:none}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.ln{stroke-dashoffset:0}}
 </style></head><body><div id="app"></div>
-<nav aria-label="Asosiy navigatsiya" hidden><button data-v="home"><i data-lucide="home" class="ic"></i><span>Bosh</span></button><button data-v="rep"><i data-lucide="bar-chart-3" class="ic"></i><span>Hisobot</span></button><button class="fab" aria-label="Qo'shish" onclick="txForm()"><i data-lucide="plus" class="ic"></i><span>Qo'shish</span></button><button data-v="debts"><i data-lucide="handshake" class="ic"></i><span>Qarzlar</span></button><button data-v="more"><i data-lucide="menu" class="ic"></i><span>Ko'proq</span></button></nav>
+<nav aria-label="Asosiy navigatsiya"><button data-v="home"><i data-lucide="home" class="ic"></i><span>Bosh</span></button><button data-v="rep"><i data-lucide="bar-chart-3" class="ic"></i><span>Hisobot</span></button><button class="fab" aria-label="Qo'shish" onclick="txForm()"><i data-lucide="plus" class="ic"></i><span>Qo'shish</span></button><button data-v="debts"><i data-lucide="handshake" class="ic"></i><span>Qarzlar</span></button><button data-v="more"><i data-lucide="menu" class="ic"></i><span>Ko'proq</span></button></nav>
 <dialog id="dlg"></dialog><div id="toast" popover="manual" role="status"></div>
 <script>
 const MN=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentyabr','Oktyabr','Noyabr','Dekabr'];
@@ -72,7 +71,7 @@ const $=s=>document.querySelector(s);
 let S={tx:[],debts:[],cats:[],rate:12500,init:0,name:'',theme:''},accountReady=false,cloudQueue=Promise.resolve();
 const TG=window.Telegram?.WebApp,INIT_DATA=TG?.initData||'',BACKEND_URL='https://ysmeadoqfzhwhvzljquqr.supabase.co/functions/v1/telegram-finance',SUPABASE_PUBLISHABLE_KEY='sb_publishable_GaAZGVLTpXiounSR5pSSjw_f9JobgTi';
 if(S.theme)document.documentElement.dataset.theme=S.theme;
-async function cloudCall(action,state){const r=await fetch(BACKEND_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY},body:JSON.stringify({action,initData:INIT_DATA,...(state?{state}:{})})});const d=await r.json();if(!r.ok||!d.ok)throw Error('Cloud request failed');return d}
+async function cloudCall(action,state){const r=await fetch(BACKEND_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY},body:JSON.stringify({action,initData:INIT_DATA,...(state?{state}:{})})});let d;try{d=await r.json()}catch{throw Error('Server javobi: HTTP '+r.status)}if(!r.ok||!d.ok)throw Error(d.error||('HTTP '+r.status));return d}
 const save=()=>{if(!accountReady)return;const snapshot=JSON.stringify(S);cloudQueue=cloudQueue.then(()=>cloudCall('save',JSON.parse(snapshot))).catch(()=>toast("Saqlanmadi. Internetni tekshirib qayta urinib ko'ring."))};
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 let V='home',M=today().slice(0,7),D=today(),F={q:'',t:'',c:'',d:'',m:'',n:30};
@@ -188,8 +187,8 @@ function render(keep){const f={home,tx:txv,debts,rep,set:settings,more}[V];if(ke
 document.querySelectorAll('nav [data-v]').forEach(b=>b.classList.toggle('on',b.dataset.v==V||(b.dataset.v=='more'&&(V=='tx'||V=='set'))));lab();fx()}
 document.querySelectorAll('nav [data-v]').forEach(b=>b.onclick=()=>{V=b.dataset.v;render();scrollTo(0,0)});
 if(TG)TG.ready();
-async function startApp(){const app=$('#app'),nav=document.querySelector('nav');nav.hidden=true;if(!TG||!INIT_DATA){app.innerHTML='<div class="card"><h2>Telegram orqali oching</h2><p class="mu">Shaxsiy hisobingizga kirish uchun bot ichidagi ilovani oching.</p></div>';return}
+async function startApp(){const app=$('#app');if(!TG||!INIT_DATA){app.innerHTML='<div class="card"><h2>Telegram orqali oching</h2><p class="mu">Shaxsiy hisobingizga kirish uchun bot ichidagi ilovani oching.</p></div>';return}
 if(!BACKEND_URL.startsWith('https://')||SUPABASE_PUBLISHABLE_KEY.startsWith('SET_')){app.innerHTML='<div class="card"><h2>Server hali ulanmagan</h2><p class="mu">Hisoblarni ishga tushirish uchun server sozlamasi kerak.</p></div>';return}
-app.innerHTML='<div class="card">Yuklanmoqda…</div>';try{const d=await cloudCall('load');S=Object.assign({tx:[],debts:[],cats:[],rate:12500,init:0,name:d.user?.first_name||'',theme:''},d.state||{});if(S.theme)document.documentElement.dataset.theme=S.theme;accountReady=true;nav.hidden=false;render()}catch(e){nav.hidden=true;app.innerHTML='<div class="card"><h2>Ulanib bo‘lmadi</h2><p class="mu">Internetni tekshirib, qayta urinib ko‘ring.</p><button class="btn" onclick="startApp()">Qayta urinish</button></div>'}}
+app.innerHTML='<div class="card">Yuklanmoqda…</div>';try{const d=await cloudCall('load');S=Object.assign({tx:[],debts:[],cats:[],rate:12500,init:0,name:d.user?.first_name||'',theme:''},d.state||{});if(S.theme)document.documentElement.dataset.theme=S.theme;accountReady=true;render()}catch(e){app.innerHTML='<div class="card"><h2>Ulanib bo‘lmadi</h2><p class="mu">Sabab: '+esc(e.message||'noma’lum xato')+'</p><button class="btn" onclick="startApp()">Qayta urinish</button></div>'}}
 startApp();
 </script></body></html>
