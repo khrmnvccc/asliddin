@@ -69,7 +69,7 @@ const EX=['🛒 Tovar','🚕 Taksi','🍔 Ovqat','🏠 Uy','📱 Telefon/interne
 const PM=['Naqd','Karta','Bank','Dollar','Boshqa'],COL=['#0b6b4f','#ef6a5b','#f59e0b','#38a685','#5b6b7f','#c2410c','#94a3b8','#14532d','#fb923c','#0f766e','#9ca3af','#b91c1c'];
 const $=s=>document.querySelector(s);
 let S={tx:[],debts:[],cats:[],rate:12500,init:0,name:'',theme:''},accountReady=false,cloudQueue=Promise.resolve();
-const TG=window.Telegram?.WebApp,INIT_DATA=TG?.initData||'',BACKEND_URL='https://ysmeadoqfzhwhvzljquqr.supabase.co/functions/v1/telegram-finance',SUPABASE_PUBLISHABLE_KEY='sb_publishable_GaAZGVLTpXiounSR5pSSjw_f9JobgTi';
+const TG=window.Telegram?.WebApp,INIT_DATA=TG?.initData||'',BACKEND_URL='https://ysmeadoqfzwhhvzljuqr.supabase.co/functions/v1/telegram-finance',SUPABASE_PUBLISHABLE_KEY='sb_publishable_GaAZGVLTpXiounSR5pSSjw_f9JobgTi';
 if(S.theme)document.documentElement.dataset.theme=S.theme;
 async function cloudCall(action,state){const r=await fetch(BACKEND_URL,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_PUBLISHABLE_KEY},body:JSON.stringify({action,initData:INIT_DATA,...(state?{state}:{})})});let d;try{d=await r.json()}catch{throw Error('Server javobi: HTTP '+r.status)}if(!r.ok||!d.ok)throw Error(d.error||('HTTP '+r.status));return d}
 const save=()=>{if(!accountReady)return;const snapshot=JSON.stringify(S);cloudQueue=cloudQueue.then(()=>cloudCall('save',JSON.parse(snapshot))).catch(()=>toast("Saqlanmadi. Internetni tekshirib qayta urinib ko'ring."))};
