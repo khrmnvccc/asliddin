@@ -3,6 +3,7 @@ const TABLE = "finance_accounts";
 const REMINDERS = "debt_reminder_deliveries";
 const REFERRAL_CODES = "finance_referral_codes";
 const REFERRALS = "finance_referrals";
+const REFERRAL_ADMINS = "finance_referral_payout_admins";
 const DEFAULT_STATE = { tx: [], debts: [], cats: [], rate: 12500, init: 0, name: "", theme: "" };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const enc = new TextEncoder();
@@ -221,8 +222,27 @@ Deno.serve(async (req) => {
         own = await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}&select=code`, dbHeaders);
       }
       if (!own?.length) return response({ ok: false, error: "Taklif havolasini yaratib bo‘lmadi. SQL sozlamasini tekshiring." }, 500);
-      const rows = await restJson(`${root}/${REFERRALS}?referrer_user_id=eq.${encodeURIComponent(userId)}&select=invitee_username,clicked_at,subscription_paid_at,reward_paid_at&order=clicked_at.desc&limit=500`, dbHeaders);
-      return response({ ok: true, code: own[0].code, referrals: rows || [], rewardPerPaidInvite: 10000 });
+      const displayName = String(authUser.email || "").split("@")[0].slice(0, 40) || "Ishtirokchi";
+      await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}`, dbHeaders, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ display_name: displayName }) });
+      const rows = await restJson(`${root}/${REFERRALS}?referrer_user_id=eq.${encodeURIComponent(userId)}&select=referred_user_id,invitee_username,clicked_at,subscription_paid_at,reward_paid_at&order=clicked_at.desc&limit=500`, dbHeaders);
+      const admins = await restJson(`${root}/${REFERRAL_ADMINS}?user_id=eq.${encodeURIComponent(userId)}&select=user_id`, dbHeaders);
+      const leaderboard = await restJson(`${root}/rpc/get_referral_leaderboard`, dbHeaders, { method: "POST", body: "{}" });
+      return response({ ok: true, code: own[0].code, referrals: rows || [], leaderboard: leaderboard || [], canManagePayouts: !!admins?.length, rewardPerPaidInvite: 10000 });
+    }
+    if (body.action === "mark_referral_paid") {
+      const referredUserId = String(body.referredUserId || "");
+      if (!UUID_RE.test(referredUserId)) return response({ ok: false, error: "Foydalanuvchi aniqlanmadi." }, 400);
+      const root = dbUrl.replace(/\/finance_accounts$/, "");
+      const admins = await restJson(`${root}/${REFERRAL_ADMINS}?user_id=eq.${encodeURIComponent(userId)}&select=user_id`, dbHeaders);
+      if (!admins?.length) return response({ ok: false, error: "Bu amal faqat boshqaruvchiga ruxsat etilgan." }, 403);
+      const payout = await fetch(`${root}/${REFERRALS}?referrer_user_id=eq.${encodeURIComponent(userId)}&referred_user_id=eq.${encodeURIComponent(referredUserId)}&subscription_paid_at=not.is.null&reward_paid_at=is.null&select=referred_user_id`, {
+        method: "PATCH",
+        headers: { ...dbHeaders, Prefer: "return=representation" },
+        body: JSON.stringify({ reward_paid_at: new Date().toISOString() }),
+      });
+      if (!payout.ok) return response({ ok: false, error: "To‘lov holatini saqlab bo‘lmadi." }, 500);
+      if (!(await payout.json()).length) return response({ ok: false, error: "Bu taklif topilmadi, obunasi tasdiqlanmagan yoki mukofot avval belgilangan." }, 409);
+      return response({ ok: true });
     }
     if (body.action === "link_telegram") {
       if (!botToken) return response({ ok: false, error: "Telegram bot serverda sozlanmagan." }, 503);
