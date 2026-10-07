@@ -85,3 +85,49 @@ revoke execute on function public.backup_finance_account_before_update() from pu
 -- If referral attribution was captured after account activation, credit it only
 -- when the signed link click predates that recorded paid activation.
 
+-- Referral payout marking and public-to-app leaderboard.
+alter table public.finance_referral_codes
+  add column if not exists display_name text not null default '';
+
+update public.finance_referral_codes c
+   set display_name = coalesce(nullif(split_part(u.email, '@', 1), ''), 'Ishtirokchi')
+  from auth.users u
+ where u.id = c.user_id
+   and (c.display_name = '' or c.display_name is null);
+
+create table if not exists public.finance_referral_payout_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.finance_referral_payout_admins enable row level security;
+revoke all on table public.finance_referral_payout_admins from public, anon, authenticated;
+grant all on table public.finance_referral_payout_admins to service_role;
+grant select on public.finance_referral_codes, public.finance_referrals to service_role;
+
+-- Make the confirmed site owner the only payout manager.
+insert into public.finance_referral_payout_admins(user_id)
+select user_id
+  from public.finance_referral_codes
+ where code = 'P8AQV4BT'
+on conflict (user_id) do nothing;
+
+create or replace function public.get_referral_leaderboard()
+returns table(display_name text, paid_invites bigint, earned_amount bigint)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select coalesce(nullif(btrim(c.display_name), ''), 'Ishtirokchi') as display_name,
+         count(*)::bigint as paid_invites,
+         (count(*) * 10000)::bigint as earned_amount
+    from public.finance_referral_codes c
+    join public.finance_referrals r on r.referrer_user_id = c.user_id
+   where r.reward_paid_at is not null
+   group by c.user_id, c.display_name
+   order by count(*) desc, c.display_name asc
+   limit 50;
+$$;
+revoke execute on function public.get_referral_leaderboard() from public, anon, authenticated;
+grant execute on function public.get_referral_leaderboard() to service_role;
+
