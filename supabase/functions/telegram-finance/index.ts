@@ -1,6 +1,8 @@
 const SITE_ORIGIN = "https://khrmnvccc.github.io";
 const TABLE = "finance_accounts";
 const REMINDERS = "debt_reminder_deliveries";
+const REFERRAL_CODES = "finance_referral_codes";
+const REFERRALS = "finance_referrals";
 const DEFAULT_STATE = { tx: [], debts: [], cats: [], rate: 12500, init: 0, name: "", theme: "" };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const enc = new TextEncoder();
@@ -30,6 +32,60 @@ function validState(state: unknown) {
 async function hmacHex(keyBytes: Uint8Array, message: string) {
   const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return [...new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(message)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function b64url(value: string) {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function unb64url(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  return atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+}
+
+async function signReferralTicket(payload: Record<string, unknown>, serviceKey: string) {
+  const body = b64url(JSON.stringify(payload));
+  const signature = await hmacHex(enc.encode(serviceKey), body);
+  return `${body}.${signature}`;
+}
+
+async function readReferralTicket(ticket: unknown, serviceKey: string) {
+  if (typeof ticket !== "string" || ticket.length > 2048) return null;
+  const [body, signature, extra] = ticket.split(".");
+  if (!body || !signature || extra) return null;
+  const expected = await hmacHex(enc.encode(serviceKey), body);
+  if (signature.length !== expected.length) return null;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
+  if (diff) return null;
+  try {
+    const value = JSON.parse(unb64url(body));
+    const issuedAt = Number(value.issuedAt);
+    if (!/^[A-Z2-9]{8}$/.test(value.code) || !Number.isFinite(issuedAt) || Date.now() - issuedAt > 30 * 86400000 || issuedAt > Date.now() + 60000) return null;
+    return { code: value.code as string, issuedAt };
+  } catch { return null; }
+}
+
+async function restJson(url: string, headers: Record<string, string>, init?: RequestInit) {
+  const r = await fetch(url, { ...init, headers: { ...headers, ...(init?.headers || {}) } });
+  if (!r.ok) throw new Error("Database request failed");
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function captureReferral(ticketValue: unknown, serviceKey: string, dbUrl: string, dbHeaders: Record<string, string>, userId: string, username: string, createdAt: string, expiresAt: string | null, subscriptionPaidAt: string | null) {
+  const ticket = await readReferralTicket(ticketValue, serviceKey);
+  if (!ticket) return;
+  const codes = await restJson(`${dbUrl.replace(/\/finance_accounts$/, "")}/${REFERRAL_CODES}?code=eq.${encodeURIComponent(ticket.code)}&select=user_id`, dbHeaders);
+  const referrerId = codes?.[0]?.user_id;
+  if (!referrerId || referrerId === userId) return;
+  const paid = !!subscriptionPaidAt && ticket.issuedAt <= Date.parse(subscriptionPaidAt) && !!expiresAt && Date.parse(expiresAt) > Date.now();
+  if (!paid && ticket.issuedAt >= Date.parse(createdAt)) return;
+  await restJson(`${dbUrl.replace(/\/finance_accounts$/, "")}/${REFERRALS}`, dbHeaders, {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=minimal" },
+    body: JSON.stringify({ referrer_user_id: referrerId, referred_user_id: userId, invitee_username: username, clicked_at: new Date(ticket.issuedAt).toISOString(), ...(paid ? { subscription_paid_at: subscriptionPaidAt } : {}) }),
+  });
 }
 
 async function telegramUser(initData: string, botToken: string) {
@@ -109,6 +165,17 @@ Deno.serve(async (req) => {
       return response({ ok: true, sent: await sendDebtReminders(supabaseUrl, serviceKey, botToken) });
     }
     if (origin !== SITE_ORIGIN) return response({ ok: false, error: "Forbidden" }, 403);
+    if (body.action === "referral_click") {
+      if (!supabaseUrl || !serviceKey) return response({ ok: false, error: "Server is not configured" }, 503);
+      const code = String(body.code || "").toUpperCase();
+      if (!/^[A-Z2-9]{8}$/.test(code)) return response({ ok: false, error: "Taklif havolasi noto‘g‘ri" }, 400);
+      const root = `${supabaseUrl.replace(/\/$/, "")}/rest/v1`;
+      const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+      const codes = await restJson(`${root}/${REFERRAL_CODES}?code=eq.${encodeURIComponent(code)}&select=code`, headers);
+      if (!codes?.length) return response({ ok: false, error: "Taklif havolasi topilmadi" }, 404);
+      const ticket = await signReferralTicket({ code, issuedAt: Date.now() }, serviceKey);
+      return response({ ok: true, ticket });
+    }
     const publishableKey = req.headers.get("apikey") || "";
     const accessToken = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
     if (!supabaseUrl || !serviceKey) return response({ ok: false, error: "Server is not configured" }, 503);
@@ -125,7 +192,7 @@ Deno.serve(async (req) => {
     const dbUrl = `${supabaseUrl.replace(/\/$/, "")}/rest/v1/${TABLE}`;
     const dbHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
 
-    const accountResponse = await fetch(`${dbUrl}?user_id=eq.${encodeURIComponent(userId)}&select=expires_at,telegram_chat_id,state`, { headers: dbHeaders });
+    const accountResponse = await fetch(`${dbUrl}?user_id=eq.${encodeURIComponent(userId)}&select=expires_at,subscription_paid_at,telegram_chat_id,state`, { headers: dbHeaders });
     if (!accountResponse.ok) return response({ ok: false, error: "Could not check subscription" }, 500);
     const accountRows = await accountResponse.json();
     const expiresAt = accountRows[0]?.expires_at;
@@ -134,10 +201,28 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "load") {
+      try {
+        await captureReferral(body.referralTicket, serviceKey, dbUrl, dbHeaders, userId, String(authUser.email || "").split("@")[0], String(authUser.created_at || new Date().toISOString()), expiresAt || null, accountRows[0]?.subscription_paid_at || null);
+      } catch { /* Referral attribution must not block account access. */ }
       const r = await fetch(`${dbUrl}?user_id=eq.${encodeURIComponent(userId)}&select=state`, { headers: dbHeaders });
       if (!r.ok) return response({ ok: false, error: "Could not load account" }, 500);
       const rows = await r.json();
       return response({ ok: true, state: rows[0]?.state ?? DEFAULT_STATE, telegramLinked: !!accountRows[0]?.telegram_chat_id });
+    }
+    if (body.action === "referrals") {
+      const root = dbUrl.replace(/\/finance_accounts$/, "");
+      let own = await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}&select=code`, dbHeaders);
+      if (!own?.length) {
+        const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), (n) => alphabet[n % alphabet.length]).join("");
+        try {
+          await restJson(`${root}/${REFERRAL_CODES}`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, code }) });
+        } catch { /* Another session may have created the code first. */ }
+        own = await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}&select=code`, dbHeaders);
+      }
+      if (!own?.length) return response({ ok: false, error: "Taklif havolasini yaratib bo‘lmadi. SQL sozlamasini tekshiring." }, 500);
+      const rows = await restJson(`${root}/${REFERRALS}?referrer_user_id=eq.${encodeURIComponent(userId)}&select=invitee_username,clicked_at,subscription_paid_at,reward_paid_at&order=clicked_at.desc&limit=500`, dbHeaders);
+      return response({ ok: true, code: own[0].code, referrals: rows || [], rewardPerPaidInvite: 10000 });
     }
     if (body.action === "link_telegram") {
       if (!botToken) return response({ ok: false, error: "Telegram bot serverda sozlanmagan." }, 503);
