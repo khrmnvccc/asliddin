@@ -77,6 +77,11 @@ create trigger finance_accounts_credit_referral
 after insert or update on public.finance_accounts
 for each row execute function public.credit_referral_after_subscription();
 
+-- These are trigger-only routines, not public RPC endpoints.
+revoke execute on function public.mark_referral_subscription_paid() from public, anon, authenticated;
+revoke execute on function public.credit_referral_after_subscription() from public, anon, authenticated;
+revoke execute on function public.backup_finance_account_before_update() from public, anon, authenticated;
+
 -- If referral attribution was captured after account activation, credit it only
 -- when the signed link click predates that recorded paid activation.
 
