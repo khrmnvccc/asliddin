@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pulim — Telegram moliya boti</title>
+<meta name="description" content="Pulim — Telegram ichidagi shaxsiy moliya boti. Xarajatni bitta xabar bilan yozing, bank SMS'ini forward qiling, hisobotni bir zumda oling.">
+<meta name="theme-color" content="#050b1f">
+<meta property="og:title" content="Pulim — Telegram moliya boti">
+<meta property="og:description" content="Xarajatni bitta xabar bilan yozing, bank SMS'ini forward qiling, hisobotni bir zumda oling.">
+<link rel="icon" href="data:image/jpeg;base64,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">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+/* Layout: one dark "night ledger" column; hero pairs the pitch with a live chat you can type into, then features, steps, tariffs, referral calculator, FAQ. */
+:root{
+  --bg:#050b1f; --bg2:#081332; --surface:#0d1a40; --line:rgba(140,175,255,.16);
+  --ink:#f3f6ff; --muted:#9db0db; --dim:#6f82b0;
+  --accent:#2f6bff; --accent2:#1a47d6; --sky:#7db8ff; --paper:#ffffff; --paper-ink:#081a4d;
+  --good:#3ddc97; --bad:#ff6b85;
+  --display:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+.wrap{max-width:1160px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;letter-spacing:-.025em}
+p{margin:0}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--sky)}
+:focus-visible{outline:2px solid var(--sky);outline-offset:3px;border-radius:8px}
+code,.mono{font-family:var(--mono);font-size:.92em}
+
+/* backdrop */
+.glow{position:absolute;inset:-68px 0 0;overflow:hidden;pointer-events:none;z-index:0}
+.glow i{position:absolute;border-radius:50%;filter:blur(100px);opacity:.5}
+.grid{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;opacity:.45;-webkit-mask-image:radial-gradient(ellipse 70% 60% at 50% 20%,#000 20%,transparent 75%);mask-image:radial-gradient(ellipse 70% 60% at 50% 20%,#000 20%,transparent 75%)}
+
+/* nav */
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:rgba(5,11,31,.85)}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:rgba(5,11,31,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:28px;height:68px}
+.logo{display:flex;align-items:center;gap:11px;text-decoration:none;font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:-.02em}
+.logo img{width:36px;height:36px;border-radius:11px;box-shadow:0 6px 18px rgba(47,107,255,.45)}
+.links{display:flex;gap:24px;margin-left:auto;font-size:15px;color:var(--muted)}
+.links a{text-decoration:none}.links a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;font-weight:700;font-size:16px;text-decoration:none;border-radius:14px;padding:13px 20px;border:0;cursor:pointer;font-family:var(--body);transition:transform .15s,box-shadow .15s,background .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-main{background:var(--paper);color:var(--paper-ink);box-shadow:0 12px 34px rgba(47,107,255,.35)}
+.btn-blue{background:var(--accent);color:#fff;box-shadow:0 12px 34px rgba(47,107,255,.4)}
+.btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.btn svg{width:20px;height:20px;flex:none}
+nav .btn{padding:10px 16px;font-size:15px}
+
+/* hero */
+.hero{position:relative;padding-block:72px 64px}
+.hero .wrap{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.hero h1{font-size:clamp(40px,6vw,72px);line-height:1.02;font-weight:800;margin-top:18px}
+.hero h1 em{font-style:normal;background:linear-gradient(100deg,#fff 0%,var(--sky) 55%,#4f86ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:20px;color:var(--muted);margin-top:22px;max-width:34em}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.facts{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:34px;font-size:15px;color:var(--muted)}
+.facts span{display:flex;align-items:center;gap:8px}
+.facts span::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--sky)}
+
+/* chat demo */
+.phone{background:linear-gradient(170deg,#0f1f4d,#081332);border:1px solid var(--line);border-radius:30px;padding:18px;box-shadow:0 40px 100px rgba(10,30,100,.55);min-width:0}
+.phone-head{display:flex;align-items:center;gap:12px;padding:4px 6px 14px;border-bottom:1px solid var(--line)}
+.phone-head img{width:40px;height:40px;border-radius:50%}
+.phone-head b{display:block;font-size:16px}
+.phone-head small{color:var(--sky);font-size:13px}
+.chat{height:330px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:16px 4px;scroll-behavior:smooth}
+.msg{max-width:84%;padding:10px 14px;border-radius:18px;font-size:15.5px;line-height:1.45;animation:pop .25s ease-out}
+.msg.me{align-self:flex-end;background:linear-gradient(135deg,#3b82ff,#2357e8);border-bottom-right-radius:6px;font-weight:500}
+.msg.bot{align-self:flex-start;background:rgba(255,255,255,.07);border:1px solid var(--line);border-bottom-left-radius:6px}
+.msg.bot b{font-weight:700}
+.msg .row{display:block;color:var(--muted);font-size:14.5px}
+.msg .amt{font-family:var(--mono);font-weight:600;color:#fff}
+.msg .in{color:var(--good)}.msg .out{color:#ffb3c0}
+.kb{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.kb span{font-size:12.5px;padding:5px 9px;border-radius:9px;background:rgba(125,184,255,.12);color:var(--sky)}
+@keyframes pop{from{transform:translateY(6px);opacity:.3}to{transform:none;opacity:1}}
+.compose{display:flex;gap:8px;margin-top:6px}
+.compose input{flex:1;min-width:0;background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--ink);font:500 16px var(--body);padding:12px 14px;border-radius:14px}
+.compose input::placeholder{color:var(--dim)}
+.compose button{width:48px;flex:none;border-radius:14px;border:0;background:var(--accent);color:#fff;cursor:pointer;display:grid;place-items:center}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chips button{font:500 13px var(--mono);color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:99px;padding:6px 10px;cursor:pointer}
+.chips button:hover{color:var(--ink);border-color:var(--sky)}
+.hint{font-size:13px;color:var(--dim);margin-top:10px;text-align:center}
+
+/* sections */
+section{position:relative;padding-block:84px}
+.head{max-width:680px;margin-bottom:44px}
+.head h2{font-size:clamp(32px,4.4vw,50px);line-height:1.08;font-weight:800;margin-top:12px}
+.head p{color:var(--muted);font-size:18px;margin-top:16px}
+.center{text-align:center;margin-left:auto;margin-right:auto}
+
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;grid-auto-flow:dense}
+.card{background:linear-gradient(165deg,rgba(26,46,100,.55),rgba(10,20,52,.6));border:1px solid var(--line);border-radius:24px;padding:26px;min-width:0}
+.card .ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:rgba(47,107,255,.16);color:var(--sky);border:1px solid rgba(125,184,255,.3)}
+.card .ic svg{width:23px;height:23px}
+.card h3{font-size:20px;margin-top:18px;letter-spacing:-.01em}
+.card p{color:var(--muted);font-size:15.5px;margin-top:8px}
+.card .ex{display:inline-block;margin-top:14px;font-family:var(--mono);font-size:13.5px;color:var(--sky);background:rgba(125,184,255,.08);border:1px dashed rgba(125,184,255,.3);padding:6px 10px;border-radius:9px}
+.card.wide{grid-column:span 2;display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:center}
+.mini{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.mini-h{display:flex;justify-content:space-between;font-size:14px;color:var(--muted)}.mini-h b{color:var(--ink)}
+.bars{display:flex;align-items:flex-end;gap:10px;height:110px;margin-top:12px}
+.bars i{flex:1;border-radius:7px 7px 3px 3px;background:linear-gradient(var(--sky),rgba(47,107,255,.35))}
+.bars i:nth-child(3){background:linear-gradient(#fff,var(--sky))}
+.mini-l{display:flex;gap:10px;margin-top:8px}.mini-l span{flex:1;font-size:11px;color:var(--dim);text-align:center;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.sms{font-family:var(--mono);font-size:13.5px;line-height:1.6;background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:16px;padding:14px 16px;color:#d9e4ff}
+.sms .arrow{display:block;color:var(--good);margin-top:8px}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:s}
+.step{position:relative;padding:28px;border-radius:24px;border:1px solid var(--line);background:rgba(13,26,64,.5)}
+.step .n{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--paper-ink);background:var(--paper);width:34px;height:34px;border-radius:10px;display:grid;place-items:center}
+.step h3{font-size:21px;margin-top:18px}
+.step p{color:var(--muted);font-size:15.5px;margin-top:8px}
+
+/* pricing */
+.promo{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px 24px;padding:22px 26px;border-radius:22px;background:linear-gradient(110deg,#2f6bff,#1a3fb8);margin-bottom:28px;box-shadow:0 24px 70px rgba(47,107,255,.35)}
+.promo b{font-family:var(--display);font-size:22px;font-weight:800;letter-spacing:-.01em}
+.promo p{color:#dbe6ff;font-size:15.5px;margin-top:2px}
+.promo .tag{font-weight:800;font-size:13px;letter-spacing:.12em;background:#fff;color:var(--accent2);padding:6px 10px;border-radius:8px;margin-right:10px;vertical-align:3px}
+.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;align-items:stretch}
+.plan{display:flex;flex-direction:column;border-radius:28px;padding:30px;border:1px solid var(--line);background:linear-gradient(170deg,rgba(26,46,100,.6),rgba(8,16,42,.8));position:relative}
+.plan.hot{background:linear-gradient(170deg,#2f6bff 0%,#1a3fb8 60%,#102a80);border-color:rgba(200,220,255,.5);box-shadow:0 30px 80px rgba(47,107,255,.4)}
+.plan .pill{position:absolute;top:-13px;left:30px;font-size:12px;font-weight:800;letter-spacing:.12em;background:#fff;color:var(--accent2);padding:6px 11px;border-radius:99px}
+.plan h3{font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--sky);font-weight:700}
+.plan.hot h3{color:#fff}
+.plan .price{font-family:var(--display);font-weight:800;font-size:48px;letter-spacing:-.03em;margin-top:12px;font-variant-numeric:tabular-nums;line-height:1}
+.plan .price small{font-size:16px;font-weight:500;letter-spacing:0;color:var(--muted);margin-left:6px}
+.plan.hot .price small{color:#dbe6ff}
+.plan .per{font-size:14px;color:var(--muted);margin-top:8px}
+.plan.hot .per{color:#dbe6ff}
+.plan ul{list-style:none;padding:0;margin:24px 0 28px;display:grid;gap:12px;font-size:15.5px}
+.plan li{display:flex;gap:11px;align-items:flex-start}
+.plan li::before{content:"";flex:none;width:20px;height:20px;margin-top:2px;border-radius:6px;background:rgba(125,184,255,.18) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237db8ff' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/13px no-repeat}
+.plan.hot li::before{background-color:rgba(255,255,255,.2);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E")}
+.plan li.all{font-weight:700}
+.plan .btn{margin-top:auto}
+.how-buy{color:var(--muted);font-size:15px;margin-top:22px;text-align:center}
+.how-buy b{color:var(--ink)}
+
+/* referral */
+.ref{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.big{font-family:var(--display);font-weight:800;font-size:clamp(56px,8vw,96px);letter-spacing:-.04em;line-height:1;background:linear-gradient(100deg,#fff 15%,var(--sky) 60%,#4f86ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.big small{font-size:.4em;letter-spacing:-.01em}
+.ref ul{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:14px;color:var(--muted)}
+.ref li{display:flex;gap:14px}
+.ref li b{color:var(--ink)}
+.ref li i{font-style:normal;flex:none;width:28px;height:28px;border-radius:9px;background:var(--paper);color:var(--paper-ink);font:600 13px var(--mono);display:grid;place-items:center}
+.calc{background:var(--paper);color:var(--paper-ink);border-radius:28px;padding:30px;box-shadow:0 30px 90px rgba(47,107,255,.35)}
+.calc label{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent2)}
+.calc .friends{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px}
+.calc .friends b{font-family:var(--display);font-size:30px;font-weight:800}
+.calc input[type=range]{width:100%;margin-top:16px;accent-color:var(--accent)}
+.calc .out{margin-top:22px;padding-top:20px;border-top:1px solid rgba(8,26,77,.12)}
+.calc .out span{font-size:14px;color:#4a5b8c}
+.calc .out b{display:block;font-family:var(--display);font-weight:800;font-size:clamp(40px,5vw,54px);letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--accent2);line-height:1.1}
+.calc .inf{display:inline-flex;align-items:center;gap:8px;margin-top:16px;font-size:14px;font-weight:600;color:#33467e;background:#eaf0ff;padding:8px 12px;border-radius:10px}
+
+/* faq */
+.faq{max-width:820px;margin:0 auto;display:grid;gap:12px}
+details{border:1px solid var(--line);border-radius:18px;background:rgba(13,26,64,.45);padding:0 22px}
+summary{cursor:pointer;list-style:none;padding:20px 0;font-weight:600;font-size:17.5px;display:flex;justify-content:space-between;gap:16px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-size:24px;line-height:1;color:var(--sky);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{color:var(--muted);padding-bottom:20px;font-size:16px}
+
+.final{text-align:center;border-radius:36px;padding:64px 28px;background:radial-gradient(ellipse at 50% 0%,rgba(47,107,255,.55),transparent 70%),linear-gradient(180deg,#0d1d4d,#081332);border:1px solid var(--line)}
+.final h2{font-size:clamp(32px,4.6vw,54px);font-weight:800}
+.final p{color:var(--muted);margin-top:14px;font-size:18px}
+.final .cta-row{justify-content:center}
+footer{padding-block:40px 48px;color:var(--dim);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
+
+@media (max-width:900px){
+  .links{display:none}
+  nav .btn{margin-left:auto}
+  .hero .wrap,.ref{grid-template-columns:1fr}
+  .feat,.prices,.steps{grid-template-columns:1fr}
+  .card.wide{grid-column:auto;grid-template-columns:1fr}
+  .hero{padding-block:44px 40px}
+  section{padding-block:60px}
+}
+@media (min-width:901px) and (max-width:1060px){.feat{grid-template-columns:1fr 1fr}.card.wide{grid-column:span 2}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#top"><img src="data:image/jpeg;base64,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" alt="">Pulim</a>
+    <div class="links"><a href="#imkoniyatlar">Imkoniyatlar</a><a href="#qanday">Qanday ishlaydi</a><a href="#tariflar">Tariflar</a><a href="#taklif">Taklif dasturi</a><a href="#savollar">Savollar</a></div>
+    <a class="btn btn-main" href="https://t.me/pulim_bott" target="_blank" rel="noopener">Botni ochish</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="glow"><i style="background:#2f6bff;width:720px;height:720px;left:-200px;top:-260px"></i><i style="background:#1a47d6;width:560px;height:560px;right:-160px;top:120px"></i><div class="grid"></div></div>
+  <div class="wrap">
+    <div>
+      <div class="eyebrow">Telegram ichidagi shaxsiy moliya boti</div>
+      <h1>Pulingiz qayerga ketayotganini <em>endi bilasiz</em></h1>
+      <p class="lead">Xarajatni bitta xabar bilan yozing, bank SMS’ini forward qiling, oylik hisobotni bir zumda oling. Ilova o‘rnatish ham, jadval to‘ldirish ham shart emas.</p>
+      <div class="cta-row">
+        <a class="btn btn-blue" href="https://t.me/pulim_bott" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 4.2 2.9 11.4c-1.2.5-1.2 1.2-.2 1.5l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.3-2.3 4.9 3.6c.9.5 1.5.2 1.8-.8l3.2-15.1c.3-1.3-.5-1.9-1.8-1.6zM8.6 14l9.9-6.3c.5-.3.9-.1.6.2l-8.5 7.7-.3 3.6L8.6 14z"/></svg>t.me/pulim_bott</a>
+        <a class="btn btn-ghost" href="#tariflar">Tariflarni ko‘rish</a>
+      </div>
+      <div class="facts"><span>So‘m va dollar</span><span>Uzcard · Humo · CardXabar</span><span>19 000 so‘mdan</span></div>
+    </div>
+
+    <div class="phone" aria-label="Pulim bot bilan namunaviy suhbat">
+      <div class="phone-head"><img src="data:image/jpeg;base64,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" alt=""><div><b>Pulim</b><small>bot · onlayn</small></div></div>
+      <div class="chat" id="chat" aria-live="polite"></div>
+      <form class="compose" id="compose">
+        <input id="entry" aria-label="Botga xabar" autocomplete="off" placeholder="Masalan: 35 000 ovqat">
+        <button type="submit" aria-label="Yuborish"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.1 15 12 3.4 13.9z"/></svg></button>
+      </form>
+      <div class="chips" id="chips"></div>
+      <p class="hint">Bu namunaviy demo. O‘zingiz yozib ko‘ring: bot summani, turini va kategoriyani shunday aniqlaydi.</p>
+    </div>
+  </div>
+</header>
+
+<section id="imkoniyatlar">
+  <div class="wrap">
+    <div class="head"><div class="eyebrow">Imkoniyatlar</div><h2>Hisob-kitobning zerikarli qismini Pulim o‘zi qiladi</h2><p>Siz odatdagidek yozasiz. Pulim summani, kirim yoki chiqimligini, kategoriyani va to‘lov usulini o‘zi ajratib oladi.</p></div>
+    <div class="feat">
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><h3>Bitta xabar bilan yozish</h3><p>Summa va nimaga ketganini yozing, qolganini bot tushunadi. “Kecha” desangiz, kechagi sana bilan saqlaydi.</p><span class="ex">kecha 120000 benzin</span></div>
+      <div class="card wide"><div><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></div><h3>Bank SMS’ini forward qiling</h3><p>Uzcard, Humo yoki CardXabar xabarini botga yuboring. Summa, kirim yoki chiqim ekani va do‘kon nomi o‘zi aniqlanadi. Qoldiq balans summasi chalkashtirilmaydi.</p></div>
+        <div class="sms">HUMO *4521<br>Pokupka: 125 000.00 UZS<br>KORZINKA CHILONZOR<br>Balans: 1 830 400 UZS<span class="arrow">→ Xarajat · 125 000 so‘m · Tovar · Karta</span></div></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></div><h3>Hisobot bir zumda</h3><p>Shu oy qancha kirdi, qancha chiqdi, nima qoldi. Bugungi yozuvlar ham bitta buyruq bilan.</p><span class="ex">/balans · /bugun</span></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><h3>Qarz daftari va eslatmalar</h3><p>Kim qancha qarz, qachongacha qaytarishi kerak. Bot muddatdan 3 va 1 kun oldin, to‘lov kuni va muddat o‘tib ketsa eslatadi.</p></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.4c-.6-.9-1.7-1.4-3-1.4-1.7 0-3 .9-3 2.2 0 3 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.3 0-2.5-.5-3.1-1.4M12 6v2m0 8v2"/></svg></div><h3>So‘m va dollar</h3><p>Dollardagi xarajatni ham yozing, u alohida hisoblanadi. Naqd, karta va dollar hisoblari aralashib ketmaydi.</p><span class="ex">$20 kafe</span></div>
+      <div class="card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></div><h3>Biznes va oila alohida</h3><p>Shaxsiy, oilaviy va biznes xarajatlari bir-biriga aralashmaydi. Har biri o‘z kategoriyasida ko‘rinadi.</p><span class="ex">biznes 400 000 tovar</span></div>
+      <div class="card wide"><div><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></div><h3>Web-panel, Excel va PDF</h3><p>Bot ichidan ochiladigan panelda grafiklar va kategoriyalar bo‘yicha statistika. Hisobotni Excel yoki PDF qilib yuklab olasiz.</p></div>
+        <div class="mini"><div class="mini-h"><b>Oktabr</b><span>Xarajatlar</span></div><div class="bars"><i style="height:78%"></i><i style="height:46%"></i><i style="height:100%"></i><i style="height:62%"></i><i style="height:30%"></i><i style="height:40%"></i></div><div class="mini-l"><span>Ovqat</span><span>Taksi</span><span>Tovar</span><span>Uy</span><span>Kommunal</span><span>Boshqa</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="qanday">
+  <div class="wrap">
+    <div class="head"><div class="eyebrow">Qanday ishlaydi</div><h2>Boshlash uchun bir daqiqa yetadi</h2></div>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>Botni oching</h3><p>Telegram’da <b>t.me/pulim_bott</b> ni oching va <code>/start</code> ni bosing.</p></div>
+      <div class="step"><div class="n">2</div><h3>Yozing yoki forward qiling</h3><p>“50 000 taksi” kabi yozing yoki bank xabarini yuboring. Bot darhol tasdiqlaydi, xato bo‘lsa bir tugma bilan bekor qilasiz.</p></div>
+      <div class="step"><div class="n">3</div><h3>Hisobotni oling</h3><p><code>/balans</code> bilan oylik holatni ko‘ring yoki web-panelda grafiklarni oching.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="tariflar">
+  <div class="wrap">
+    <div class="head center"><div class="eyebrow">Tariflar</div><h2>O‘zingizga mos tarifni tanlang</h2><p>Hamma tariflar oylik. Xohlagan paytda yuqoriroq tarifga o‘tishingiz mumkin.</p></div>
+    <div class="promo"><div><b><span class="tag">AKSIYA</span>Mega skidka: Premium 19 000 so‘m</b><p>Premium tarifni Boshlang‘ich tarif narxida oling. 69 000 o‘rniga 19 000 so‘m.</p></div><a class="btn btn-main" href="https://t.me/khrmnvccc" target="_blank" rel="noopener">Aksiyadan foydalanish</a></div>
+    <div class="prices">
+      <div class="plan"><h3>Boshlang‘ich</h3><div class="price">19 000<small>so‘m / oy</small></div><div class="per">Kuniga taxminan 630 so‘m</div>
+        <ul><li>Matn bilan tez kiritish</li><li>Avtomatik kategoriyalar</li><li><span><code>/balans</code> va <code>/bugun</code> hisobotlari</span></li><li>Naqd, karta va dollar hisobi</li></ul>
+        <a class="btn btn-ghost" href="https://t.me/khrmnvccc" target="_blank" rel="noopener">Tanlash</a></div>
+      <div class="plan hot"><span class="pill">ENG OMMABOP</span><h3>Standart</h3><div class="price">39 000<small>so‘m / oy</small></div><div class="per">Kuniga taxminan 1 300 so‘m</div>
+        <ul><li class="all">Boshlang‘ichdagi hammasi</li><li>Bank SMS va CardXabar o‘qish</li><li>Qarz daftari</li><li>Qarz muddati eslatmalari</li><li>Grafikli web-panel</li></ul>
+        <a class="btn btn-main" href="https://t.me/khrmnvccc" target="_blank" rel="noopener">Tanlash</a></div>
+      <div class="plan"><h3>Premium</h3><div class="price">69 000<small>so‘m / oy</small></div><div class="per">Kuniga taxminan 2 300 so‘m</div>
+        <ul><li class="all">Standartdagi hammasi</li><li>Excel va PDF hisobotlar</li><li>Biznes va oila xarajatlari alohida</li><li>Kengaytirilgan oylik tahlil</li><li>Ustuvor qo‘llab-quvvatlash</li></ul>
+        <a class="btn btn-ghost" href="https://t.me/khrmnvccc" target="_blank" rel="noopener">Tanlash</a></div>
+    </div>
+    <p class="how-buy">Obuna olish uchun Telegram’da <b>@khrmnvccc</b> ga yozing. Obuna faollashganda bot sizga xabar beradi, tugashidan 3 va 1 kun oldin esa eslatadi.</p>
+  </div>
+</section>
+
+<section id="taklif">
+  <div class="wrap ref">
+    <div>
+      <div class="eyebrow">Taklif dasturi</div>
+      <div class="big" style="margin-top:14px">10 000<small> so‘m</small></div>
+      <h2 style="font-size:clamp(26px,3.4vw,36px);margin-top:8px">har bir chaqirgan do‘stingiz uchun</h2>
+      <p style="color:var(--muted);margin-top:14px;font-size:18px">Taklif sonida chegara yo‘q. Qancha ko‘p do‘st chaqirsangiz, shuncha ko‘p pul ishlaysiz.</p>
+      <ul>
+        <li><i>1</i><span><b>Havolangizni oling.</b> Botdagi “Do‘stlarni taklif qilish” bo‘limida.</span></li>
+        <li><i>2</i><span><b>Do‘stlarga yuboring.</b> Do‘stingiz havola orqali kirsa, sizga darhol xabar keladi.</span></li>
+        <li><i>3</i><span><b>Pulni oling.</b> Do‘stingiz obuna olgach, 10 000 so‘m kartangizga o‘tkaziladi.</span></li>
+      </ul>
+    </div>
+    <div class="calc">
+      <label for="friends">Qancha ishlaysiz?</label>
+      <div class="friends"><span>Obuna olgan do‘stlar</span><b id="fn">10</b></div>
+      <input type="range" id="friends" min="1" max="200" value="10">
+      <div class="out"><span>Sizning mukofotingiz</span><b id="fsum">100 000 so‘m</b></div>
+      <div class="inf">∞ Cheksiz taklif qilish mumkin</div>
+    </div>
+  </div>
+</section>
+
+<section id="savollar">
+  <div class="wrap">
+    <div class="head center"><div class="eyebrow">Savollar</div><h2>Ko‘p so‘raladigan savollar</h2></div>
+    <div class="faq">
+      <details open><summary>Pulim nima?</summary><p>Pulim Telegram ichida ishlaydigan shaxsiy moliya boti. U kirim va chiqimlaringizni yozib boradi, kategoriyalarga ajratadi va oylik hisobot beradi.</p></details>
+      <details><summary>Alohida ilova o‘rnatish kerakmi?</summary><p>Yo‘q. Hamma narsa Telegram’da ishlaydi. Grafik va batafsil statistika uchun bot ichidan web-panel ochiladi.</p></details>
+      <details><summary>Qaysi bank xabarlarini tushunadi?</summary><p>Uzcard, Humo kartalari va CardXabar xabarlarini. Xabarni botga forward qilsangiz, summa va to‘lov turi o‘zi aniqlanadi.</p></details>
+      <details><summary>Xato yozib qo‘ysam nima bo‘ladi?</summary><p>Har bir yozuv ostida “Bekor qilish” tugmasi bor. Kirimni xarajatga yoki aksincha bitta tugma bilan almashtirish ham mumkin.</p></details>
+      <details><summary>Obunani qanday olaman?</summary><p>Telegram’da @khrmnvccc ga yozing va tarifni tanlang. Obuna faollashganda bot xabar beradi, tugashiga 3 va 1 kun qolganda eslatadi.</p></details>
+      <details><summary>Taklif mukofoti qachon beriladi?</summary><p>Siz chaqirgan do‘stingiz obuna olgach, 10 000 so‘m hisoblanadi va kartangizga o‘tkaziladi. Nechta do‘st chaqirishda chegara yo‘q.</p></details>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:20px">
+  <div class="wrap">
+    <div class="final"><h2>Bugundan pulingizni nazorat qiling</h2><p>Birinchi xarajatingizni yozish uchun bir daqiqa yetadi.</p>
+      <div class="cta-row"><a class="btn btn-main" href="https://t.me/pulim_bott" target="_blank" rel="noopener">t.me/pulim_bott</a><a class="btn btn-ghost" href="#tariflar">Tariflar</a></div></div>
+  </div>
+</section>
+
+<footer><div class="wrap"><span>Pulim bot · by khrmnvccc</span><span>Savollar uchun: @khrmnvccc</span></div></footer>
+
+<script>
+(function(){
+  const OUT=[[/taks|taxi|yandex ?go|mytaxi/i,"Taksi"],[/benzin|metan|propan|zapravka|moyka|avto|mashina/i,"Mashina"],[/ovqat|tushlik|nonushta|kechki|non\b|kafe|cafe|restoran|evos|kofe|coffee|choy|lavash|somsa|osh\b/i,"Ovqat"],[/korzinka|makro|havas|bozor|magazin|supermarket|market|do'?kon|xarid/i,"Tovar"],[/telefon|internet|ucell|beeline|uzmobile|mobiuz/i,"Telefon/internet"],[/svet|elektr|gaz\b|suv\b|kommunal/i,"Kommunal"],[/ijara|kvartira|\buy\b/i,"Uy"],[/kredit|nasiya/i,"Kredit"],[/oila|bola|sovg'?a/i,"Oila"],[/biznes/i,"Biznes"]];
+  const IN=[[/oylik|maosh|ish ?haqi|avans/i,"Ish haqi"],[/sotdim|sotuv|savdo/i,"Savdo"],[/mijoz|klient/i,"Mijozdan tushum"],[/xizmat/i,"Xizmat"],[/qaytardi|qaytdi/i,"Qarz qaytishi"]];
+  const pick=(t,l)=>{for(const[r,c]of l)if(r.test(t))return c;return""};
+  const fmt=n=>Math.round(n).toLocaleString("ru-RU").replace(/ |,/g," ");
+  const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  function parse(text){
+    const t=text.trim();let usd=0,amt=0;
+    const d=t.match(/\$\s?(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s?(?:\$|dollar)/i);
+    if(d){usd=parseFloat((d[1]||d[2]).replace(",","."));amt=usd}
+    else{const m=t.match(/(\d[\d\s]*(?:[.,]\d+)?)\s*(mln|million|k|ming)?/i);if(!m)return null;amt=parseFloat(m[1].replace(/\s/g,"").replace(",","."));const u=(m[2]||"").toLowerCase();if(u==="mln"||u==="million")amt*=1e6;else if(u==="k"||u==="ming")amt*=1e3}
+    if(!amt)return null;
+    const inCat=pick(t,IN);const isIn=/^\+|kirim|tushdi|keldi/i.test(t)||!!inCat;
+    const cat=isIn?(inCat||"Boshqa kirim"):(pick(t,OUT)||"Boshqa");
+    const method=/karta|click|payme/i.test(t)?"Karta":usd?"Dollar":"Naqd";
+    const kecha=/\bkecha\b/i.test(t);
+    const note=t.replace(/\$?\s?\d[\d\s.,]*\s*(mln|million|k|ming|\$|dollar)?/i,"").replace(/\b(kecha|bugun|karta|kartadan|naqd)\b/gi,"").replace(/\s+/g," ").trim();
+    return{isIn,amt,usd,cat,method,kecha,note};
+  }
+  const chat=document.getElementById("chat");
+  function add(cls,html){const el=document.createElement("div");el.className="msg "+cls;el.innerHTML=html;chat.appendChild(el);chat.scrollTop=chat.scrollHeight}
+  function reply(text){
+    const p=parse(text);
+    if(!p){add("bot","Summani topa olmadim. Masalan: <b>50 000 taksi</b> yoki <b>$20 kafe</b>");return}
+    add("bot",`<b>✓ ${p.isIn?"Kirim qo‘shildi":"Xarajat qo‘shildi"}</b><span class="row"><span class="amt ${p.isIn?"in":"out"}">${p.isIn?"+":"−"}${p.usd?"$"+p.usd:fmt(p.amt)+" so‘m"}</span> · ${p.cat}</span>${p.note?`<span class="row">${esc(p.note)}</span>`:""}<span class="row">${p.kecha?"Kecha":"Bugun"} · ${p.method}</span><div class="kb"><span>Bekor qilish</span><span>${p.isIn?"Xarajat qilish":"Kirim qilish"}</span></div>`);
+  }
+  function send(text){if(!text.trim())return;add("me",esc(text));setTimeout(()=>reply(text),380)}
+  document.getElementById("compose").addEventListener("submit",e=>{e.preventDefault();const i=document.getElementById("entry");send(i.value);i.value=""});
+  const samples=["50 000 taksi","oylik 6 mln","$20 kafe","kecha 120000 benzin","korzinka 85 000 karta"];
+  const chips=document.getElementById("chips");
+  samples.forEach(s=>{const b=document.createElement("button");b.type="button";b.textContent=s;b.onclick=()=>send(s);chips.appendChild(b)});
+  // Opening state: a short real-looking conversation.
+  add("me","50 000 taksi");reply("50 000 taksi");
+  add("me","oylik 6 mln");reply("oylik 6 mln");
+
+  const r=document.getElementById("friends"),fn=document.getElementById("fn"),fs=document.getElementById("fsum");
+  const upd=()=>{fn.textContent=r.value;fs.textContent=fmt(r.value*10000)+" so‘m"};
+  r.addEventListener("input",upd);upd();
+})();
+</script>
+
+</body>
+</html>
