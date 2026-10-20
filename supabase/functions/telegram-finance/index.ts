@@ -233,6 +233,31 @@ async function tgCall(botToken: string, method: string, payload: Record<string, 
   } catch { return null; }
 }
 
+let cachedBotUsername = "";
+async function botUsername(botToken: string) {
+  if (!cachedBotUsername) cachedBotUsername = (await tgCall(botToken, "getMe", {}))?.result?.username || "";
+  return cachedBotUsername;
+}
+
+// A friend who opened the bot through a referral link gets credited once they have an
+// account linked to the same Telegram chat (same rules as the browser referral ticket).
+async function attachClickReferral(db: string, headers: Record<string, string>, userId: string, chatId: string, createdAt: string, botToken: string | undefined) {
+  const click = (await restJson(`${db}/finance_referral_clicks?telegram_id=eq.${encodeURIComponent(chatId)}&select=code,clicked_at`, headers))?.[0];
+  if (!click) return;
+  const referrerId = (await restJson(`${db}/${REFERRAL_CODES}?code=eq.${encodeURIComponent(click.code)}&select=user_id`, headers))?.[0]?.user_id;
+  if (!referrerId || referrerId === userId) return;
+  const account = (await restJson(`${db}/${TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=expires_at,subscription_paid_at`, headers))?.[0] || {};
+  const clickedAt = Date.parse(click.clicked_at);
+  const paid = !!account.subscription_paid_at && clickedAt <= Date.parse(account.subscription_paid_at) && !!account.expires_at && Date.parse(account.expires_at) > Date.now();
+  if (!paid && clickedAt >= Date.parse(createdAt)) return;
+  const login = (await restJson(`${db.replace(/\/rest\/v1$/, "")}/auth/v1/admin/users/${userId}`, headers).catch(() => null))?.email?.split("@")[0] || "";
+  const inserted = await restJson(`${db}/${REFERRALS}`, headers, { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ referrer_user_id: referrerId, referred_user_id: userId, invitee_username: login, clicked_at: click.clicked_at, ...(paid ? { subscription_paid_at: account.subscription_paid_at } : {}) }) });
+  if (paid && inserted?.length && botToken) {
+    const chat = (await restJson(`${db}/${TABLE}?user_id=eq.${encodeURIComponent(referrerId)}&select=telegram_chat_id`, headers))?.[0]?.telegram_chat_id;
+    await sendTelegram(botToken, chat, `🎉 <b>Taklifingiz ishladi!</b>\n\n${html(login || "Do'stingiz")} obuna bo'ldi. Sizga ${som(REFERRAL_REWARD)} mukofot hisoblandi — tez orada kartangizga o'tkaziladi.`);
+  }
+}
+
 const APP_BUTTON = [{ text: "📒 Ilovani ochish", web_app: { url: APP_URL } }];
 const HELP_TEXT = [
   "✍️ <b>Kirim va xarajatni shu yerga yozing</b> — ilovani ochish shart emas.",
@@ -290,7 +315,22 @@ async function handleTelegramUpdate(update: any, supabaseUrl: string, serviceKey
 
   const text = String(message?.text || message?.caption || "").trim();
   if (message && /^\/(start|help|yordam)\b/i.test(text)) {
-    return reply(`👋 Assalomu alaykum!\n\n${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+    const code = (text.match(/^\/start\s+ref_?([A-Z2-9]{8})\b/i)?.[1] || "").toUpperCase();
+    let invited = false;
+    if (code) {
+      try {
+        const owner = (await restJson(`${db}/${REFERRAL_CODES}?code=eq.${code}&select=user_id`, headers))?.[0]?.user_id;
+        const linked = await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id&limit=1`, headers);
+        if (owner && !linked?.length) {
+          const inserted = await restJson(`${db}/finance_referral_clicks`, headers, { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ telegram_id: chatId, code, first_name: String(from.first_name || "").slice(0, 60), username: String(from.username || "").slice(0, 40) }) });
+          invited = true;
+          const ownerChat = (await restJson(`${db}/${TABLE}?user_id=eq.${encodeURIComponent(owner)}&select=telegram_chat_id`, headers))?.[0]?.telegram_chat_id;
+          if (inserted?.length && ownerChat && ownerChat !== chatId) await sendTelegram(botToken, ownerChat, `👋 <b>${html(from.first_name || "Yangi odam")}</b> sizning havolangiz orqali botga kirdi.\n\nU obuna olsa, sizga ${som(REFERRAL_REWARD)} mukofot hisoblanadi.`);
+        }
+      } catch { /* Referral tracking must not block the welcome. */ }
+    }
+    const intro = invited ? "Siz do'stingiz taklifi bilan keldingiz 🎁\nObuna olish uchun yozing: @khrmnvccc\n\n" : "";
+    return reply(`👋 Assalomu alaykum!\n\n${intro}${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
   }
 
   const account = (await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id,state,expires_at&order=updated_at.desc&limit=1`, headers))?.[0];
@@ -424,7 +464,7 @@ Deno.serve(async (req) => {
       const codes = await restJson(`${root}/${REFERRAL_CODES}?code=eq.${encodeURIComponent(code)}&select=code`, headers);
       if (!codes?.length) return response({ ok: false, error: "Taklif havolasi topilmadi" }, 404);
       const ticket = await signReferralTicket({ code, issuedAt: Date.now() }, serviceKey);
-      return response({ ok: true, ticket });
+      return response({ ok: true, ticket, botUsername: botToken ? await botUsername(botToken) : "" });
     }
     const publishableKey = req.headers.get("apikey") || "";
     const accessToken = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -462,6 +502,7 @@ Deno.serve(async (req) => {
           if (!taken?.length) {
             await restJson(`${dbUrl}?on_conflict=user_id`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, state: accountRows[0]?.state ?? DEFAULT_STATE, telegram_chat_id: chatId }) });
             accountRows[0] = { ...(accountRows[0] || {}), telegram_chat_id: chatId };
+            await attachClickReferral(root, dbHeaders, userId, chatId, String(authUser.created_at || new Date().toISOString()), botToken).catch(() => {});
           }
         } catch { /* Linking is optional. */ }
       }
@@ -489,7 +530,11 @@ Deno.serve(async (req) => {
       await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}`, dbHeaders, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ display_name: displayName }) });
       const rows = await restJson(`${root}/${REFERRALS}?referrer_user_id=eq.${encodeURIComponent(userId)}&select=referred_user_id,invitee_username,clicked_at,subscription_paid_at,reward_paid_at&order=clicked_at.desc&limit=500`, dbHeaders);
       const leaderboard = await restJson(`${root}/rpc/get_referral_leaderboard`, dbHeaders, { method: "POST", body: "{}" });
-      return response({ ok: true, code: own[0].code, referrals: rows || [], leaderboard: leaderboard || [], canManagePayouts: await isAdmin(), rewardPerPaidInvite: REFERRAL_REWARD });
+      // People who opened the bot through the link but have no linked account yet.
+      const clicks = await restJson(`${root}/finance_referral_clicks?code=eq.${own[0].code}&select=telegram_id,first_name,username,clicked_at&order=clicked_at.desc&limit=200`, dbHeaders).catch(() => []);
+      const linkedIds = clicks?.length ? new Set(((await restJson(`${dbUrl}?telegram_chat_id=in.(${clicks.map((c: any) => c.telegram_id).join(",")})&select=telegram_chat_id`, dbHeaders)) || []).map((a: any) => a.telegram_chat_id)) : new Set();
+      const pendingClicks = (clicks || []).filter((c: any) => !linkedIds.has(c.telegram_id)).map((c: any) => ({ name: c.first_name || (c.username ? "@" + c.username : "Telegram foydalanuvchi"), clicked_at: c.clicked_at }));
+      return response({ ok: true, code: own[0].code, referrals: rows || [], pendingClicks, leaderboard: leaderboard || [], canManagePayouts: await isAdmin(), rewardPerPaidInvite: REFERRAL_REWARD });
     }
     if (body.action === "mark_referral_paid") {
       const referredUserId = String(body.referredUserId || "");
@@ -628,6 +673,7 @@ Deno.serve(async (req) => {
       const state = accountRows[0]?.state ?? DEFAULT_STATE;
       const r = await fetch(`${dbUrl}?on_conflict=user_id`, { method: "POST", headers: { ...dbHeaders, Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, state, telegram_chat_id: chatId, updated_at: new Date().toISOString() }) });
       if (!r.ok) return response({ ok: false, error: "Telegram akkauntini saqlab bo'lmadi." }, 500);
+      await attachClickReferral(root, dbHeaders, userId, chatId, String(authUser.created_at || new Date().toISOString()), botToken).catch(() => {});
       return response({ ok: true, linked: true });
     }
     if (body.action === "save" && validState(body.state)) {
