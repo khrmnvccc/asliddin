@@ -1,3 +1,5 @@
+import { hashText, monthSummary, parseMessage } from "./bot.ts";
+
 const SITE_ORIGIN = "https://khrmnvccc.github.io";
 const TABLE = "finance_accounts";
 const REMINDERS = "debt_reminder_deliveries";
@@ -220,6 +222,150 @@ async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botTok
   return sent;
 }
 
+async function webhookSecret(botToken: string) {
+  return (await hmacHex(enc.encode(botToken), "pulim-webhook")).slice(0, 48);
+}
+
+async function tgCall(botToken: string, method: string, payload: Record<string, unknown>) {
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    return await r.json();
+  } catch { return null; }
+}
+
+const APP_BUTTON = [{ text: "📒 Ilovani ochish", web_app: { url: APP_URL } }];
+const HELP_TEXT = [
+  "✍️ <b>Kirim va xarajatni shu yerga yozing</b> — ilovani ochish shart emas.",
+  "",
+  "<code>50000 taksi</code> — xarajat",
+  "<code>35k ovqat</code> — 35 000 so'm",
+  "<code>+4.5mln oylik</code> — kirim",
+  "<code>$20 kafe</code> — dollarda",
+  "<code>kecha 120000 benzin</code> — kechagi sana bilan",
+  "",
+  "💳 Bank yoki CardXabar xabarini shu yerga <b>forward</b> qilsangiz, summasi va turi o'zi aniqlanadi.",
+  "",
+  "/balans — shu oy hisoboti · /bugun — bugungi yozuvlar",
+].join("\n");
+
+function txCard(tx: any, title: string) {
+  const sign = tx.type === "in" ? "💰" : "💸";
+  return [
+    `${title}`,
+    "",
+    `${sign} <b>${som(tx.amt)}</b>${tx.usd ? ` ($${tx.usd})` : ""} · ${html(tx.cat)}`,
+    tx.note ? `📝 ${html(tx.note)}` : "",
+    `📅 ${dmy(tx.date)} · ${html(tx.method)}`,
+  ].filter(Boolean).join("\n");
+}
+
+function txButtons(tx: any) {
+  return { inline_keyboard: [[{ text: "↩️ Bekor qilish", callback_data: `del:${tx.id}` }, { text: tx.type === "in" ? "🔄 Xarajat qilish" : "🔄 Kirim qilish", callback_data: `flip:${tx.id}` }], APP_BUTTON] };
+}
+
+// Applies a change to the account's state, retrying if the app saved in between.
+async function updateState(db: string, headers: Record<string, string>, userId: string, change: (state: any) => any) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const row = (await restJson(`${db}/${TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=state,updated_at`, headers))?.[0];
+    if (!row) return null;
+    const state = { ...DEFAULT_STATE, ...(row.state || {}) };
+    const result = change(state);
+    if (result === undefined) return { state, result };
+    const r = await fetch(`${db}/${TABLE}?user_id=eq.${encodeURIComponent(userId)}&updated_at=eq.${encodeURIComponent(row.updated_at)}`, { method: "PATCH", headers: { ...headers, Prefer: "return=representation" }, body: JSON.stringify({ state, updated_at: new Date().toISOString() }) });
+    if (r.ok && (await r.json()).length) return { state, result };
+  }
+  throw new Error("State update conflict");
+}
+
+async function handleTelegramUpdate(update: any, supabaseUrl: string, serviceKey: string, botToken: string) {
+  const db = `${supabaseUrl.replace(/\/$/, "")}/rest/v1`;
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+  const callback = update.callback_query;
+  const message = update.message;
+  const from = callback?.from || message?.from;
+  if (!from?.id || from.is_bot) return;
+  if (message && message.chat?.type !== "private") return;
+  const chatId = String(from.id);
+  const reply = (text: string, extra: Record<string, unknown> = {}) => tgCall(botToken, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra });
+
+  const text = String(message?.text || message?.caption || "").trim();
+  if (message && /^\/(start|help|yordam)\b/i.test(text)) {
+    return reply(`👋 Assalomu alaykum!\n\n${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+  }
+
+  const account = (await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id,state,expires_at&order=updated_at.desc&limit=1`, headers))?.[0];
+  if (!account) {
+    if (callback) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Hisob ulanmagan", show_alert: true });
+    return reply("🔐 Hisobingiz hali botga ulanmagan.\n\nPastdagi tugma orqali ilovani oching va login bilan kiring — hisob avtomatik ulanadi. Keyin shu yerga yozib kirim-xarajat qo'shishingiz mumkin.", { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+  }
+  if (account.expires_at && Date.parse(account.expires_at) <= Date.now()) {
+    if (callback) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Obuna muddati tugagan", show_alert: true });
+    return reply("⛔️ Obuna muddati tugagan. Yangilash uchun yozing: @khrmnvccc");
+  }
+
+  if (callback) {
+    const [action, txId] = String(callback.data || "").split(":");
+    const done = await updateState(db, headers, account.user_id, (state) => {
+      const list = Array.isArray(state.tx) ? state.tx : [];
+      const i = list.findIndex((t: any) => t.id === txId);
+      if (i < 0) return undefined;
+      if (action === "del") { const [removed] = list.splice(i, 1); state.tx = list; return { removed }; }
+      if (action === "flip") {
+        const t = list[i];
+        t.type = t.type === "in" ? "out" : "in";
+        if (t.src === "bot") t.cat = t.type === "in" ? "Boshqa" : "🔧 Boshqa";
+        state.tx = list;
+        return { flipped: t };
+      }
+      return undefined;
+    });
+    const msg = callback.message;
+    if (!done?.result) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Bu yozuv topilmadi yoki allaqachon o'chirilgan." });
+    if (done.result.removed) {
+      if (msg) await tgCall(botToken, "editMessageText", { chat_id: chatId, message_id: msg.message_id, text: txCard(done.result.removed, "🗑 <b>Bekor qilindi</b>"), parse_mode: "HTML" });
+      return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "O'chirildi" });
+    }
+    const t = done.result.flipped;
+    if (msg) await tgCall(botToken, "editMessageText", { chat_id: chatId, message_id: msg.message_id, text: txCard(t, t.type === "in" ? "✅ <b>Kirim qo'shildi</b>" : "✅ <b>Xarajat qo'shildi</b>"), parse_mode: "HTML", reply_markup: txButtons(t) });
+    return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: t.type === "in" ? "Kirimga o'zgartirildi" : "Xarajatga o'zgartirildi" });
+  }
+
+  if (!text) return reply(HELP_TEXT);
+  if (/^\/(balans|hisobot|oy)\b/i.test(text)) {
+    const s = monthSummary(account.state);
+    const [y, m] = s.month.split("-");
+    const top = s.top.map(([c, v]) => `• ${html(c)} — ${som(v)}`).join("\n");
+    return reply(`📊 <b>${m}.${y} hisoboti</b>\n\n💰 Kirim: <b>${som(s.income)}</b>\n💸 Xarajat: <b>${som(s.expense)}</b>\n📈 Farq: <b>${som(s.income - s.expense)}</b>\n\n👛 Umumiy balans: <b>${som(s.balance)}</b>${top ? `\n\nEng ko'p xarajat:\n${top}` : ""}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+  }
+  if (/^\/bugun\b/i.test(text)) {
+    const day = tashkentParts().day;
+    const list = (account.state?.tx || []).filter((t: any) => t.date === day);
+    if (!list.length) return reply("Bugun hali yozuv yo'q. Masalan: <code>50000 taksi</code>");
+    const lines = list.slice(-20).map((t: any) => `${t.type === "in" ? "💰 +" : "💸 −"}${som(t.amt)} · ${html(t.cat)}${t.note ? ` · ${html(String(t.note).slice(0, 30))}` : ""}`);
+    return reply(`📅 <b>Bugun</b>\n\n${lines.join("\n")}`);
+  }
+  if (text.startsWith("/")) return reply(HELP_TEXT);
+
+  const parsed = parseMessage(text, Number(account.state?.rate) || 12500);
+  if (!parsed) return reply(`🤔 Summani topa olmadim.\n\n${HELP_TEXT}`);
+  const hash = await hashText(text);
+  const tx = {
+    id: "t" + Date.now() + Math.floor(Math.random() * 1000),
+    type: parsed.type, amt: parsed.amt, usd: parsed.usd, rate: parsed.usd ? Number(account.state?.rate) || 12500 : 1,
+    date: parsed.date, cat: parsed.cat, note: parsed.note, method: parsed.method,
+    src: "bot", ts: Date.now(), ...(parsed.bank ? { tgHash: hash } : {}),
+  };
+  const done = await updateState(db, headers, account.user_id, (state) => {
+    const list = Array.isArray(state.tx) ? state.tx : [];
+    if (parsed.bank && list.some((t: any) => t.tgHash === hash)) return undefined;
+    list.push(tx);
+    state.tx = list;
+    return true;
+  });
+  if (!done?.result) return reply("ℹ️ Bu bank xabari avval qo'shilgan.");
+  return reply(txCard(tx, tx.type === "in" ? "✅ <b>Kirim qo'shildi</b>" : "✅ <b>Xarajat qo'shildi</b>"), { reply_markup: txButtons(tx) });
+}
+
 // The cron job sends the key stored in Vault. It may be a different (but valid) server key
 // than the one this function receives, so the database compares it against Vault itself.
 async function cronAllowed(authorization: string, supabaseUrl: string, serviceKey: string) {
@@ -244,6 +390,23 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
+    const telegramSecret = req.headers.get("x-telegram-bot-api-secret-token");
+    if (telegramSecret !== null) {
+      if (!botToken || !supabaseUrl || !serviceKey || telegramSecret !== await webhookSecret(botToken)) return response({ ok: false }, 403);
+      try { await handleTelegramUpdate(body, supabaseUrl, serviceKey, botToken); } catch { /* Always 200 so Telegram doesn't retry forever. */ }
+      return response({ ok: true });
+    }
+    if (body.action === "setup_webhook") {
+      if (origin || !serviceKey || !supabaseUrl || !botToken) return response({ ok: false, error: "Forbidden" }, 403);
+      if (!(await cronAllowed(req.headers.get("authorization") || "", supabaseUrl, serviceKey))) return response({ ok: false, error: "Forbidden" }, 403);
+      const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/telegram-finance`;
+      const info = await tgCall(botToken, "getWebhookInfo", {});
+      const current = info?.result?.url || "";
+      if (body.mode !== "set" || (current && current !== url && !body.force)) return response({ ok: true, changed: false, current, pending: info?.result?.pending_update_count ?? null, lastError: info?.result?.last_error_message || null });
+      const set = await tgCall(botToken, "setWebhook", { url, secret_token: await webhookSecret(botToken), allowed_updates: ["message", "callback_query"], max_connections: 20 });
+      const commands = await tgCall(botToken, "setMyCommands", { commands: [{ command: "balans", description: "Shu oy hisoboti" }, { command: "bugun", description: "Bugungi yozuvlar" }, { command: "help", description: "Qanday yozish kerak" }] });
+      return response({ ok: !!set?.ok, changed: true, set: set?.description || null, commands: !!commands?.ok });
+    }
     const isCron = body.action === "send_reminders";
     if (isCron) {
       if (origin || !serviceKey || !supabaseUrl) return response({ ok: false, error: "Forbidden" }, 403);
@@ -291,6 +454,17 @@ Deno.serve(async (req) => {
     }
 
     if (body.action === "load") {
+      // Opening the app inside Telegram links that chat to this account if nothing else uses it.
+      if (botToken && body.initData && !accountRows[0]?.telegram_chat_id) {
+        try {
+          const chatId = await telegramUser(String(body.initData), botToken);
+          const taken = await restJson(`${dbUrl}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id&limit=1`, dbHeaders);
+          if (!taken?.length) {
+            await restJson(`${dbUrl}?on_conflict=user_id`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, state: accountRows[0]?.state ?? DEFAULT_STATE, telegram_chat_id: chatId }) });
+            accountRows[0] = { ...(accountRows[0] || {}), telegram_chat_id: chatId };
+          }
+        } catch { /* Linking is optional. */ }
+      }
       try {
         const credited = await captureReferral(body.referralTicket, serviceKey, dbUrl, dbHeaders, userId, String(authUser.email || "").split("@")[0], String(authUser.created_at || new Date().toISOString()), expiresAt || null, accountRows[0]?.subscription_paid_at || null);
         if (credited && botToken) await sendTelegram(botToken, await chatIdOf(credited), `🎉 <b>Taklifingiz ishladi!</b>\n\n${html(String(authUser.email || "").split("@")[0])} obuna bo'ldi. Sizga ${som(REFERRAL_REWARD)} mukofot hisoblandi — tez orada kartangizga o'tkaziladi.`);
@@ -298,7 +472,7 @@ Deno.serve(async (req) => {
       const r = await fetch(`${dbUrl}?user_id=eq.${encodeURIComponent(userId)}&select=state`, { headers: dbHeaders });
       if (!r.ok) return response({ ok: false, error: "Could not load account" }, 500);
       const rows = await r.json();
-      return response({ ok: true, state: rows[0]?.state ?? DEFAULT_STATE, telegramLinked: !!accountRows[0]?.telegram_chat_id, isAdmin: await isAdmin() });
+      return response({ ok: true, state: rows[0]?.state ?? DEFAULT_STATE, telegramLinked: !!accountRows[0]?.telegram_chat_id, isAdmin: await isAdmin(), serverTime: Date.now() });
     }
     if (body.action === "referrals") {
       let own = await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}&select=code`, dbHeaders);
@@ -450,12 +624,18 @@ Deno.serve(async (req) => {
       const chatId = await telegramUser(String(body.initData || ""), botToken);
       const permissionCheck = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, text: "✅ Qarz eslatmalari ulandi. Endi muddatdan 3 va 1 kun oldin, to'lash kuni va muddat o'tib ketsa xabar olasiz." }) });
       if (!permissionCheck.ok) return response({ ok: false, error: "Bot sizga xabar yubora olmadi. Telegram ruxsatini yoqing va botga /start yuboring." }, 400);
+      await fetch(`${dbUrl}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&user_id=neq.${encodeURIComponent(userId)}`, { method: "PATCH", headers: { ...dbHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ telegram_chat_id: null }) });
       const state = accountRows[0]?.state ?? DEFAULT_STATE;
       const r = await fetch(`${dbUrl}?on_conflict=user_id`, { method: "POST", headers: { ...dbHeaders, Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, state, telegram_chat_id: chatId, updated_at: new Date().toISOString() }) });
       if (!r.ok) return response({ ok: false, error: "Telegram akkauntini saqlab bo'lmadi." }, 500);
       return response({ ok: true, linked: true });
     }
     if (body.action === "save" && validState(body.state)) {
+      // Transactions the bot added after the app loaded aren't in the app's copy yet; keep them.
+      const loadedAt = Number(body.loadedAt) || 0;
+      const incoming = new Set(body.state.tx.map((t: any) => t?.id));
+      const unseen = (accountRows[0]?.state?.tx || []).filter((t: any) => t?.src === "bot" && Number(t.ts) > loadedAt && !incoming.has(t.id));
+      if (unseen.length) body.state.tx = [...body.state.tx, ...unseen];
       const r = await fetch(`${dbUrl}?on_conflict=user_id`, {
         method: "POST",
         headers: { ...dbHeaders, Prefer: "resolution=merge-duplicates,return=minimal" },
