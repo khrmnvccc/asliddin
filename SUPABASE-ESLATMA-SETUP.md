@@ -19,3 +19,7 @@ SQL fayli Supabase Vault, Cron va HTTP kengaytmalarini yoqadi. Agar kengaytma lo
 ## 2026-10-20 yangilanish
 
 `supabase/2026-10-admin-reminders.sql` bazaga qo‘llangan va Edge Function 12-versiyasi deploy qilingan. Cron endi Vault’dagi kalitni bazaning o‘zi orqali tekshiradi (avval har soat 403 qaytarardi). Qo‘shimcha: 1 kun oldin va kechikkan qarz eslatmalari, obuna tugash ogohlantirishi, admin panel (Ko‘proq → Admin panel) va taklif mukofoti uchun Telegram xabarlari.
+
+## Botga yozib kirim/xarajat qo‘shish (2026-10-20)
+
+Edge Function 13-versiya. Bot webhook’i shu funksiyaga ulangan (`setup_webhook` amali, Cron kaliti bilan). Foydalanuvchi botga `50000 taksi`, `+4.5mln oylik` yozsa yoki bank/CardXabar xabarini forward qilsa, yozuv uning hisobiga qo‘shiladi. Hisob ilovani bot ichida ochganda avtomatik ulanadi. Matnni tushunish: `supabase/functions/telegram-finance/bot.ts`.
