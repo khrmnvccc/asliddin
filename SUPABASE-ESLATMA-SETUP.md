@@ -15,3 +15,7 @@ Soatlik jadval har bir foydalanuvchining tanlagan vaqtida (Toshkent vaqti) teksh
 
 SQL fayli Supabase Vault, Cron va HTTP kengaytmalarini yoqadi. Agar kengaytma loyihada mavjud bo‘lmasa yoki SQL xato qaytarsa, xato matnini ko‘rib, alohida sozlash kerak bo‘lishi mumkin.
 
+
+## 2026-10-20 yangilanish
+
+`supabase/2026-10-admin-reminders.sql` bazaga qo‘llangan va Edge Function 12-versiyasi deploy qilingan. Cron endi Vault’dagi kalitni bazaning o‘zi orqali tekshiradi (avval har soat 403 qaytarardi). Qo‘shimcha: 1 kun oldin va kechikkan qarz eslatmalari, obuna tugash ogohlantirishi, admin panel (Ko‘proq → Admin panel) va taklif mukofoti uchun Telegram xabarlari.
