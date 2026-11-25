@@ -259,6 +259,53 @@ async function attachClickReferral(db: string, headers: Record<string, string>, 
 }
 
 const APP_BUTTON = [{ text: "📒 Ilovani ochish", web_app: { url: APP_URL } }];
+const CONTACT_KEYBOARD = { keyboard: [[{ text: "📱 Raqamni yuborish", request_contact: true }]], resize_keyboard: true, one_time_keyboard: true };
+
+function newPassword() {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  return Array.from(crypto.getRandomValues(new Uint8Array(10)), (n) => alphabet[n % alphabet.length]).join("");
+}
+
+function authAdmin(supabaseUrl: string, serviceKey: string) {
+  return { url: `${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/users`, headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" } };
+}
+
+// Signs a user in without a password (the Mini App proves who they are with Telegram initData).
+async function sessionFor(supabaseUrl: string, serviceKey: string, publishableKey: string, email: string) {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const admin = authAdmin(supabaseUrl, serviceKey);
+  const link = await restJson(`${base}/auth/v1/admin/generate_link`, admin.headers, { method: "POST", body: JSON.stringify({ type: "magiclink", email }) });
+  const tokenHash = link?.hashed_token || link?.properties?.hashed_token;
+  if (!tokenHash) throw new Error("No token");
+  const r = await fetch(`${base}/auth/v1/verify`, { method: "POST", headers: { apikey: publishableKey || serviceKey, "Content-Type": "application/json" }, body: JSON.stringify({ type: "magiclink", token_hash: tokenHash }) });
+  const session = await r.json().catch(() => null);
+  if (!r.ok || !session?.access_token) throw new Error("Verify failed");
+  return session;
+}
+
+// The bot opens an account for anyone who shares their own phone number. The login is the number.
+async function registerByContact(db: string, headers: Record<string, string>, supabaseUrl: string, serviceKey: string, botToken: string, from: any, contact: any, reply: (text: string, extra?: Record<string, unknown>) => Promise<unknown>) {
+  const chatId = String(from.id);
+  if (String(contact?.user_id || "") !== chatId) return reply("Iltimos, pastdagi tugma orqali <b>o'zingizning</b> raqamingizni yuboring.", { reply_markup: CONTACT_KEYBOARD });
+  const login = String(contact.phone_number || "").replace(/\D/g, "").slice(0, 20);
+  if (login.length < 7) return reply("Raqamni o'qib bo'lmadi. Qayta urinib ko'ring.", { reply_markup: CONTACT_KEYBOARD });
+  const linked = await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id&limit=1`, headers);
+  if (linked?.length) {
+    await reply("✅ Hisobingiz allaqachon ochilgan.", { reply_markup: { remove_keyboard: true } });
+    return reply("Ilovani pastdagi tugma orqali oching. Brauzerdan kirish uchun parol kerak bo'lsa, /parol deb yozing.", { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+  }
+  const admin = authAdmin(supabaseUrl, serviceKey);
+  const password = newPassword();
+  const created = await fetch(admin.url, { method: "POST", headers: admin.headers, body: JSON.stringify({ email: `${login}@${LOGIN_DOMAIN}`, password, email_confirm: true, user_metadata: { telegram_id: chatId, phone: login } }) });
+  const createdBody = await created.json().catch(() => ({}));
+  const userId = createdBody.id || createdBody.user?.id;
+  if (!created.ok || !userId) return reply("Bu raqam bilan hisob avval ochilgan yoki xatolik bo'ldi. Muammo davom etsa, @khrmnvccc ga yozing.", { reply_markup: { remove_keyboard: true } });
+  const name = String(from.first_name || "").slice(0, 40);
+  await restJson(`${db}/${TABLE}?on_conflict=user_id`, headers, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, state: { ...DEFAULT_STATE, name }, telegram_chat_id: chatId, updated_at: new Date().toISOString() }) });
+  await attachClickReferral(db, headers, userId, chatId, String(createdBody.created_at || new Date().toISOString()), botToken).catch(() => {});
+  await reply("✅ Raqamingiz qabul qilindi.", { reply_markup: { remove_keyboard: true } });
+  return reply(`🎉 <b>Hisobingiz ochildi!</b>\n\nIlova bot ichida avtomatik kiradi — pastdagi tugmani bosing.\n\nBrauzerdan kirish uchun:\nLogin: <code>${login}</code>\nParol: <code>${password}</code>\n\nParolni unutsangiz, /parol deb yozing.\n\n${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+}
 const HELP_TEXT = [
   "✍️ <b>Kirim va xarajatni shu yerga yozing</b> — ilovani ochish shart emas.",
   "",
@@ -314,6 +361,7 @@ async function handleTelegramUpdate(update: any, supabaseUrl: string, serviceKey
   const reply = (text: string, extra: Record<string, unknown> = {}) => tgCall(botToken, "sendMessage", { chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: true, ...extra });
 
   const text = String(message?.text || message?.caption || "").trim();
+  if (message?.contact) return registerByContact(db, headers, supabaseUrl, serviceKey, botToken, from, message.contact, reply);
   if (message && /^\/(start|help|yordam)\b/i.test(text)) {
     const code = (text.match(/^\/start\s+ref_?([A-Z2-9]{8})\b/i)?.[1] || "").toUpperCase();
     let invited = false;
@@ -329,18 +377,30 @@ async function handleTelegramUpdate(update: any, supabaseUrl: string, serviceKey
         }
       } catch { /* Referral tracking must not block the welcome. */ }
     }
-    const intro = invited ? "Siz do'stingiz taklifi bilan keldingiz 🎁\nObuna olish uchun yozing: @khrmnvccc\n\n" : "";
+    const intro = invited ? "Siz do'stingiz taklifi bilan keldingiz 🎁\n\n" : "";
+    const hasAccount = !!(await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id&limit=1`, headers).catch(() => []))?.length;
+    if (!hasAccount) return reply(`👋 Assalomu alaykum!\n\n${intro}<b>Pulim</b> — kirim, xarajat va qarzlaringizni yuritish uchun bepul yordamchi.\n\nHisob ochish uchun pastdagi <b>📱 Raqamni yuborish</b> tugmasini bosing.`, { reply_markup: CONTACT_KEYBOARD });
     return reply(`👋 Assalomu alaykum!\n\n${intro}${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
   }
 
   const account = (await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id,state,expires_at&order=updated_at.desc&limit=1`, headers))?.[0];
   if (!account) {
     if (callback) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Hisob ulanmagan", show_alert: true });
-    return reply("🔐 Hisobingiz hali botga ulanmagan.\n\nPastdagi tugma orqali ilovani oching va login bilan kiring — hisob avtomatik ulanadi. Keyin shu yerga yozib kirim-xarajat qo'shishingiz mumkin.", { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+    return reply("🔐 Sizda hali hisob yo'q.\n\nHisob ochish uchun pastdagi <b>📱 Raqamni yuborish</b> tugmasini bosing.", { reply_markup: CONTACT_KEYBOARD });
   }
   if (account.expires_at && Date.parse(account.expires_at) <= Date.now()) {
     if (callback) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Obuna muddati tugagan", show_alert: true });
     return reply("⛔️ Obuna muddati tugagan. Yangilash uchun yozing: @khrmnvccc");
+  }
+
+  if (message && /^\/(parol|password)\b/i.test(text)) {
+    const admin = authAdmin(supabaseUrl, serviceKey);
+    const user = await restJson(`${admin.url}/${account.user_id}`, admin.headers).catch(() => null);
+    const login = String(user?.email || "").split("@")[0];
+    const password = newPassword();
+    const r = await fetch(`${admin.url}/${account.user_id}`, { method: "PUT", headers: admin.headers, body: JSON.stringify({ password }) });
+    if (!r.ok || !login) return reply("Parolni yangilab bo'lmadi. Keyinroq urinib ko'ring.");
+    return reply(`🔑 <b>Yangi parol</b>\n\nLogin: <code>${login}</code>\nParol: <code>${password}</code>\n\nEski parol endi ishlamaydi.`);
   }
 
   if (callback) {
@@ -465,6 +525,22 @@ Deno.serve(async (req) => {
       if (!codes?.length) return response({ ok: false, error: "Taklif havolasi topilmadi" }, 404);
       const ticket = await signReferralTicket({ code, issuedAt: Date.now() }, serviceKey);
       return response({ ok: true, ticket, botUsername: botToken ? await botUsername(botToken) : "" });
+    }
+    if (body.action === "tg_login") {
+      // Opening the app inside Telegram signs the user in by their Telegram account.
+      if (!supabaseUrl || !serviceKey || !botToken) return response({ ok: false, error: "Server is not configured" }, 503);
+      let chatId = "";
+      try { chatId = await telegramUser(String(body.initData || ""), botToken); } catch (e) { return response({ ok: false, error: e instanceof Error ? e.message : "Telegram tasdig'i noto'g'ri." }, 401); }
+      const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+      const account = (await restJson(`${supabaseUrl.replace(/\/$/, "")}/rest/v1/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id&order=updated_at.desc&limit=1`, headers))?.[0];
+      if (!account) return response({ ok: false, error: "Hisob topilmadi. Botga raqamingizni yuborib hisob oching.", needsSignup: true }, 404);
+      const admin = authAdmin(supabaseUrl, serviceKey);
+      const user = await restJson(`${admin.url}/${account.user_id}`, admin.headers);
+      if (!user?.email) return response({ ok: false, error: "Hisob topilmadi." }, 404);
+      try {
+        const session = await sessionFor(supabaseUrl, serviceKey, req.headers.get("apikey") || "", user.email);
+        return response({ ok: true, session, username: String(user.email).split("@")[0] });
+      } catch { return response({ ok: false, error: "Kirib bo'lmadi. Qayta urinib ko'ring." }, 500); }
     }
     const publishableKey = req.headers.get("apikey") || "";
     const accessToken = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
