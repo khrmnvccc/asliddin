@@ -7,7 +7,7 @@ const REFERRAL_CODES = "finance_referral_codes";
 const REFERRALS = "finance_referrals";
 const REFERRAL_ADMINS = "finance_referral_payout_admins";
 // Bump APP_VERSION on each site release: a new URL makes Telegram load the fresh page instead of its cached copy.
-const APP_VERSION = "20261125f";
+const APP_VERSION = "20261125g";
 const APP_URL = `${Deno.env.get("APP_URL") || "https://khrmnvccc.github.io/asliddin/"}?v=${APP_VERSION}`;
 const LOGIN_DOMAIN = "khrmnvccc.github.io";
 const REFERRAL_REWARD = 10000;
@@ -161,6 +161,10 @@ function lastOverdueStep(daysLate: number) {
 const TEMPLATE_TABLE = "bot_templates";
 const DEBT_VARS = [{ k: "kun", l: "Kun" }, { k: "holat", l: "Kim kimga" }, { k: "kim", l: "Ism" }, { k: "summa", l: "Qolgan summa" }, { k: "muddat", l: "Muddat" }];
 const DEBT_SAMPLE = { kun: "3", holat: "Ali sizga qarzni qaytarishi kerak.", kim: "Ali", summa: "400 000 so'm", muddat: "28.11.2026" };
+const TX_VARS = [{ k: "turi", l: "Kirim/Xarajat" }, { k: "summa", l: "Summa" }, { k: "kategoriya", l: "Kategoriya" }, { k: "izoh", l: "Izoh" }, { k: "sana", l: "Sana" }, { k: "usul", l: "To'lov usuli" }];
+const TX_SAMPLE = { turi: "Xarajat", summa: "35 000 so'm", kategoriya: "🍔 Ovqat", izoh: "tushlik", sana: "25.11.2026", usul: "Naqd" };
+const DEBTX_VARS = [{ k: "holat", l: "Berdim/Oldim" }, { k: "kim", l: "Ism" }, { k: "summa", l: "Summa" }, { k: "qolgan", l: "Qolgan" }, { k: "muddat", l: "Muddat" }];
+const DEBTX_SAMPLE = { holat: "Qarz berdingiz", kim: "Ali", summa: "500 000 so'm", qolgan: "300 000 so'm", muddat: "01.12.2026" };
 const TEMPLATES: Record<string, { group: string; title: string; icon: string; hint: string; required?: boolean; vars: { k: string; l: string }[]; sample: Record<string, string>; text: string }> = {
   welcome: { group: "Ro'yxatdan o'tish", title: "Botga xush kelibsiz", icon: "hand", required: true, hint: "Hisobi yo'q odam botga /start yozganda. Ostida \"Raqamni yuborish\" tugmasi chiqadi.", vars: [{ k: "ism", l: "Ism" }], sample: { ism: "Aziz" },
     text: "👋 Assalomu alaykum, {{ism}}!\n\n*Pulim* — kirim, xarajat va qarzlaringizni yuritish uchun bepul yordamchi.\n\nHisob ochish uchun pastdagi *📱 Raqamni yuborish* tugmasini bosing." },
@@ -174,6 +178,20 @@ const TEMPLATES: Record<string, { group: string; title: string; icon: string; hi
     text: "⚠️ *Qarz muddati {{kun}} kun o'tib ketdi*\n\n{{holat}}\nQolgan summa: *{{summa}}*\nMuddat: {{muddat}}\n\nTo'lov bo'lgan bo'lsa, ilovada belgilab qo'ying." },
   test_reminder: { group: "Boshqa", title: "Sinov eslatmasi", icon: "bell-ring", required: true, hint: "Foydalanuvchi ilovada \"Sinov xabarini yuborish\" ni bosganda.", vars: [], sample: {},
     text: "🔔 *Sinov eslatmasi*\n\nHammasi joyida — qarz muddatlari yaqinlashganda shu yerga xabar keladi." },
+  tx_added: { group: "Ilovadagi o'zgarishlar", title: "Kirim yoki xarajat qo'shildi", icon: "circle-plus", hint: "Ilovada yangi kirim/xarajat saqlanganda. Bo'sh qiymatli qatorlar o'zi tushib qoladi.", vars: TX_VARS, sample: TX_SAMPLE,
+    text: "✅ *{{turi}} qo'shildi*\n\n{{kategoriya}} · *{{summa}}*\n📝 {{izoh}}\n📅 {{sana}} · {{usul}}" },
+  tx_edited: { group: "Ilovadagi o'zgarishlar", title: "Kirim yoki xarajat o'zgartirildi", icon: "pencil", hint: "Summa, kategoriya, sana yoki izoh tahrirlanganda.", vars: TX_VARS, sample: TX_SAMPLE,
+    text: "✏️ *{{turi}} o'zgartirildi*\n\n{{kategoriya}} · *{{summa}}*\n📝 {{izoh}}\n📅 {{sana}}" },
+  tx_deleted: { group: "Ilovadagi o'zgarishlar", title: "Kirim yoki xarajat o'chirildi", icon: "trash-2", hint: "Yozuv o'chirilganda.", vars: TX_VARS, sample: TX_SAMPLE,
+    text: "🗑 *{{turi}} o'chirildi*\n\n{{kategoriya}} · {{summa}}\n📝 {{izoh}}\n📅 {{sana}}" },
+  debt_added: { group: "Ilovadagi o'zgarishlar", title: "Yangi qarz", icon: "handshake", hint: "Qarz berilganda yoki olinganda.", vars: DEBTX_VARS, sample: DEBTX_SAMPLE,
+    text: "🤝 *Yangi qarz*\n\n{{holat}}: *{{kim}}*\nSumma: *{{summa}}*\n📅 Muddat: {{muddat}}" },
+  debt_deleted: { group: "Ilovadagi o'zgarishlar", title: "Qarz o'chirildi", icon: "trash-2", hint: "Qarz yozuvi o'chirilganda.", vars: DEBTX_VARS, sample: DEBTX_SAMPLE,
+    text: "🗑 *Qarz o'chirildi*\n\n{{holat}}: {{kim}}\nSumma: {{summa}}\nQolgan edi: {{qolgan}}" },
+  pay_added: { group: "Ilovadagi o'zgarishlar", title: "Qarz to'lovi", icon: "hand-coins", hint: "Qarzga to'lov qo'shilganda.", vars: DEBTX_VARS, sample: DEBTX_SAMPLE,
+    text: "💵 *Qarz to'lovi*\n\n{{kim}}: *{{summa}}*\nQolgan: {{qolgan}}" },
+  pay_deleted: { group: "Ilovadagi o'zgarishlar", title: "Qarz to'lovi o'chirildi", icon: "undo-2", hint: "Qarz to'lovi o'chirilganda.", vars: DEBTX_VARS, sample: DEBTX_SAMPLE,
+    text: "🗑 *Qarz to'lovi o'chirildi*\n\n{{kim}}: {{summa}}\nQolgan: {{qolgan}}" },
 };
 
 type TemplateRows = Record<string, { enabled: boolean; text: string }>;
@@ -183,6 +201,65 @@ async function loadTemplates(db: string, headers: Record<string, string>): Promi
     return Object.fromEntries((rows || []).map((r: any) => [r.key, { enabled: r.enabled !== false, text: String(r.text || "") }]));
   } catch { return {}; }
 }
+// Notifies the user in Telegram about what changed in the app (added/edited/deleted records).
+// deno-lint-ignore no-explicit-any
+function stateEvents(prev: any, next: any): [string, Record<string, string>][] {
+  // deno-lint-ignore no-explicit-any
+  const byId = (a: any) => new Map<string, any>((Array.isArray(a) ? a : []).filter((x: any) => x?.id != null).map((x: any) => [String(x.id), x]));
+  const money = (n: unknown) => som(Number(n) || 0);
+  const isoDay = (v: unknown) => /^\d{4}-\d\d-\d\d$/.test(String(v || "")) ? dmy(String(v)) : "";
+  // deno-lint-ignore no-explicit-any
+  const txv = (t: any) => ({ turi: t.type === "in" ? "Kirim" : "Xarajat", summa: t.usd ? `$${t.usd} (${money(t.amt)})` : money(t.amt), kategoriya: String(t.cat || ""), izoh: String(t.note || ""), sana: isoDay(t.date), usul: String(t.method || "") });
+  // deno-lint-ignore no-explicit-any
+  const left = (d: any) => Math.max(0, Number(d.amt) - (Array.isArray(d.pays) ? d.pays.reduce((s: number, p: any) => s + (Number(p?.a) || 0), 0) : 0));
+  // deno-lint-ignore no-explicit-any
+  const dv = (d: any, summa?: number) => ({ holat: d.kind === "g" ? "Qarz berdingiz" : "Qarz oldingiz", kim: String(d.name || ""), summa: money(summa ?? d.amt), qolgan: left(d) ? money(left(d)) : "0 so'm ✅", muddat: isoDay(d.due) });
+  const out: [string, Record<string, string>][] = [];
+  const ot = byId(prev?.tx), nt = byId(next?.tx);
+  for (const [id, t] of nt) {
+    const o = ot.get(id);
+    if (!o) out.push(["tx_added", txv(t)]);
+    else if (o.amt !== t.amt || o.type !== t.type || o.cat !== t.cat || o.date !== t.date || (o.note || "") !== (t.note || "")) out.push(["tx_edited", txv(t)]);
+  }
+  for (const [id, t] of ot) if (!nt.has(id)) out.push(["tx_deleted", txv(t)]);
+  const od = byId(prev?.debts), nd = byId(next?.debts);
+  for (const [id, d] of nd) {
+    const o = od.get(id);
+    if (!o) { out.push(["debt_added", dv(d)]); continue; }
+    // deno-lint-ignore no-explicit-any
+    const key = (p: any) => `${p?.d}|${p?.a}`;
+    const before = (Array.isArray(o.pays) ? o.pays : []).map(key), after = (Array.isArray(d.pays) ? d.pays : []).map(key);
+    const pending = [...before];
+    for (const k of after) {
+      const i = pending.indexOf(k);
+      if (i >= 0) pending.splice(i, 1); else out.push(["pay_added", dv(d, Number(k.split("|")[1]))]);
+    }
+    for (const k of pending) out.push(["pay_deleted", dv(d, Number(k.split("|")[1]))]);
+  }
+  for (const [id, d] of od) if (!nd.has(id)) out.push(["debt_deleted", dv(d)]);
+  return out;
+}
+// deno-lint-ignore no-explicit-any
+async function notifyChanges(botToken: string, chat: string, prev: any, next: any, db: string, headers: Record<string, string>) {
+  const events = stateEvents(prev, next);
+  if (!events.length) return;
+  const rows = await loadTemplates(db, headers);
+  const on = events.filter(([k]) => tplOn(rows, k));
+  if (!on.length) return;
+  if (on.length > 6) {
+    await sendTelegram(botToken, chat, `📋 <b>Ilovada ${on.length} ta o'zgarish saqlandi</b>\n\nBatafsil ilovada ko'ring.`);
+    return;
+  }
+  for (const [k, vars] of on) {
+    // Drop lines whose placeholders are all empty (no note, no due date, ...).
+    const text = (rows[k]?.text?.trim() || TEMPLATES[k].text).split("\n").filter((l) => {
+      const keys = [...l.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]);
+      return !keys.length || keys.some((x) => vars[x]);
+    }).join("\n");
+    await sendTelegram(botToken, chat, renderTpl(text, vars));
+  }
+}
+
 // In-app guided tour ("Yo'l-yo'riq"). Stored as JSON in bot_templates; the app holds the default steps.
 const TOUR_KEY = "app_tour";
 const TOUR_VIEWS = ["home", "debts", "rep", "more"];
@@ -870,6 +947,13 @@ Deno.serve(async (req) => {
         body: JSON.stringify({ user_id: userId, state: body.state, reminders_enabled: !!body.state.reminderPrefs?.enabled, updated_at: new Date().toISOString() }),
       });
       if (!r.ok) return response({ ok: false, error: "Could not save account" }, 500);
+      const prev = accountRows[0]?.state, chat = accountRows[0]?.telegram_chat_id;
+      if (botToken && chat && prev && Array.isArray(prev.tx)) {
+        const job = notifyChanges(botToken, chat, prev, body.state, root, dbHeaders).catch(() => {});
+        // deno-lint-ignore no-explicit-any
+        const runtime = (globalThis as any).EdgeRuntime;
+        if (runtime?.waitUntil) runtime.waitUntil(job); else await job;
+      }
       return response({ ok: true });
     }
     return response({ ok: false, error: "Invalid request" }, 400);
