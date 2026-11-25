@@ -155,23 +155,53 @@ function lastOverdueStep(daysLate: number) {
   return daysLate >= 3 ? 3 : 1;
 }
 
-function debtReminderText(debt: any, remaining: number, daysLeft: number) {
-  const mine = debt.kind === "t";
-  const who = html(String(debt.name || "").slice(0, 80));
-  const lines = [
-    mine ? `Siz <b>${who}</b>ga qarzdorsiz.` : `<b>${who}</b> sizga qarzni qaytarishi kerak.`,
-    `Qolgan summa: <b>${som(remaining)}</b>`,
-    `Muddat: ${dmy(debt.due)}`,
-  ];
-  if (daysLeft > 0) return `⏰ <b>Qarz muddatiga ${daysLeft} kun qoldi</b>\n\n${lines.join("\n")}`;
-  if (daysLeft === 0) return `📅 <b>Bugun qarz muddati</b>\n\n${lines.join("\n")}`;
-  return `⚠️ <b>Qarz muddati ${-daysLeft} kun o'tib ketdi</b>\n\n${lines.join("\n")}\n\n${mine ? "To'lovni qilgan bo'lsangiz, ilovada belgilab qo'ying." : "Pul qaytarilgan bo'lsa, ilovada to'lovni belgilab qo'ying."}`;
+// Bot messages the admin can edit in the app. Text uses *bold* and {{name}} placeholders.
+const TEMPLATE_TABLE = "bot_templates";
+const DEBT_VARS = [{ k: "kun", l: "Kun" }, { k: "holat", l: "Kim kimga" }, { k: "kim", l: "Ism" }, { k: "summa", l: "Qolgan summa" }, { k: "muddat", l: "Muddat" }];
+const DEBT_SAMPLE = { kun: "3", holat: "Ali sizga qarzni qaytarishi kerak.", kim: "Ali", summa: "400 000 so'm", muddat: "28.11.2026" };
+const TEMPLATES: Record<string, { group: string; title: string; icon: string; hint: string; required?: boolean; vars: { k: string; l: string }[]; sample: Record<string, string>; text: string }> = {
+  welcome: { group: "Ro'yxatdan o'tish", title: "Botga xush kelibsiz", icon: "hand", required: true, hint: "Hisobi yo'q odam botga /start yozganda. Ostida \"Raqamni yuborish\" tugmasi chiqadi.", vars: [{ k: "ism", l: "Ism" }], sample: { ism: "Aziz" },
+    text: "👋 Assalomu alaykum, {{ism}}!\n\n*Pulim* — kirim, xarajat va qarzlaringizni yuritish uchun bepul yordamchi.\n\nHisob ochish uchun pastdagi *📱 Raqamni yuborish* tugmasini bosing." },
+  account_created: { group: "Ro'yxatdan o'tish", title: "Hisob ochildi", icon: "user-check", required: true, hint: "Raqam yuborilgach. {{login}} va {{parol}} albatta qolsin. Ostiga bot qo'llanmasi qo'shiladi.", vars: [{ k: "ism", l: "Ism" }, { k: "login", l: "Login" }, { k: "parol", l: "Parol" }], sample: { ism: "Aziz", login: "998901234567", parol: "k7m2xq9pza" },
+    text: "🎉 *Hisobingiz ochildi!*\n\nIlova bot ichida avtomatik kiradi — pastdagi tugmani bosing.\n\nBrauzerdan kirish uchun:\nLogin: {{login}}\nParol: {{parol}}\n\nParolni unutsangiz, /parol deb yozing." },
+  debt_before: { group: "Qarz eslatmalari", title: "Muddatga oz qoldi", icon: "calendar-clock", hint: "Muddatdan 3 va 1 kun oldin.", vars: DEBT_VARS, sample: DEBT_SAMPLE,
+    text: "⏰ *Qarz muddatiga {{kun}} kun qoldi*\n\n{{holat}}\nQolgan summa: *{{summa}}*\nMuddat: {{muddat}}" },
+  debt_due: { group: "Qarz eslatmalari", title: "Bugun to'lov kuni", icon: "bell", hint: "Muddat kelgan kuni.", vars: DEBT_VARS, sample: { ...DEBT_SAMPLE, kun: "0" },
+    text: "📅 *Bugun qarz muddati*\n\n{{holat}}\nQolgan summa: *{{summa}}*\nMuddat: {{muddat}}" },
+  debt_overdue: { group: "Qarz eslatmalari", title: "Muddati o'tdi", icon: "alarm-clock", hint: "Muddatdan 1, 3, 7 kun o'tib, keyin har hafta.", vars: DEBT_VARS, sample: { ...DEBT_SAMPLE, kun: "3" },
+    text: "⚠️ *Qarz muddati {{kun}} kun o'tib ketdi*\n\n{{holat}}\nQolgan summa: *{{summa}}*\nMuddat: {{muddat}}\n\nTo'lov bo'lgan bo'lsa, ilovada belgilab qo'ying." },
+  test_reminder: { group: "Boshqa", title: "Sinov eslatmasi", icon: "bell-ring", required: true, hint: "Foydalanuvchi ilovada \"Sinov xabarini yuborish\" ni bosganda.", vars: [], sample: {},
+    text: "🔔 *Sinov eslatmasi*\n\nHammasi joyida — qarz muddatlari yaqinlashganda shu yerga xabar keladi." },
+};
+
+type TemplateRows = Record<string, { enabled: boolean; text: string }>;
+async function loadTemplates(db: string, headers: Record<string, string>): Promise<TemplateRows> {
+  try {
+    const rows = await restJson(`${db}/${TEMPLATE_TABLE}?select=key,enabled,text`, headers);
+    return Object.fromEntries((rows || []).map((r: any) => [r.key, { enabled: r.enabled !== false, text: String(r.text || "") }]));
+  } catch { return {}; }
+}
+function tplOn(rows: TemplateRows, key: string) { return !!TEMPLATES[key]?.required || rows[key]?.enabled !== false; }
+function renderTpl(text: string, vars: Record<string, string>) {
+  return html(text).replace(/\*([^*\n]+)\*/g, "<b>$1</b>").replace(/\{\{(\w+)\}\}/g, (m, k) => (k in vars ? html(vars[k]) : m));
+}
+function tpl(rows: TemplateRows, key: string, vars: Record<string, string>) {
+  return renderTpl(rows[key]?.text?.trim() || TEMPLATES[key].text, vars);
+}
+
+function debtReminderText(rows: TemplateRows, debt: any, remaining: number, daysLeft: number) {
+  const key = daysLeft > 0 ? "debt_before" : daysLeft === 0 ? "debt_due" : "debt_overdue";
+  if (!tplOn(rows, key)) return null;
+  const who = String(debt.name || "").slice(0, 80);
+  const holat = debt.kind === "t" ? `Siz ${who}ga qarzdorsiz.` : `${who} sizga qarzni qaytarishi kerak.`;
+  return tpl(rows, key, { kun: String(Math.abs(daysLeft)), holat, kim: who, summa: som(remaining), muddat: dmy(debt.due) });
 }
 
 async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botToken: string) {
   const db = `${supabaseUrl.replace(/\/$/, "")}/rest/v1`;
   const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
   const accounts = await restJson(`${db}/${TABLE}?telegram_chat_id=not.is.null&select=user_id,state,telegram_chat_id,expires_at`, headers);
+  const templates = await loadTemplates(db, headers);
   const now = tashkentParts();
   const todayUtc = Date.parse(`${now.day}T00:00:00Z`);
   let sent = 0;
@@ -191,7 +221,8 @@ async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botTok
       for (const row of rows || []) deliveries.add(`${row.debt_id}|${row.due_date}|${row.reminder_type}`);
     };
     let loaded = false;
-    const deliver = async (debtId: string, dueDate: string, type: string, text: string) => {
+    const deliver = async (debtId: string, dueDate: string, type: string, text: string | null) => {
+      if (!text) return;
       if (!loaded) { await loadDeliveries(); loaded = true; }
       if (deliveries.has(`${debtId}|${dueDate}|${type}`)) return;
       // Claim the slot first so a slow or repeated cron run cannot send the same reminder twice.
@@ -202,14 +233,8 @@ async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botTok
       else await fetch(`${db}/${REMINDERS}?user_id=eq.${encodeURIComponent(account.user_id)}&debt_id=eq.${encodeURIComponent(debtId)}&due_date=eq.${dueDate}&reminder_type=eq.${type}`, { method: "DELETE", headers });
     };
 
-    // Subscription ending soon: 3 days and 1 day before, sent at 10:00 Tashkent or later.
-    if (account.expires_at && now.hour >= 10) {
-      const expiresDay = tashkentParts(new Date(account.expires_at)).day;
-      const daysLeft = Math.round((Date.parse(`${expiresDay}T00:00:00Z`) - todayUtc) / 86400000);
-      if (daysLeft === 3 || daysLeft === 1) {
-        await deliver("subscription", expiresDay, `sub_${daysLeft}_days`, `🔔 <b>Obunangiz ${daysLeft} kundan keyin tugaydi</b> (${dmy(expiresDay)}).\n\nUzaytirish uchun yozing: @khrmnvccc`);
-      }
-    }
+    // Blocked accounts get nothing.
+    if (account.expires_at && Date.parse(account.expires_at) <= Date.now()) return;
 
     // Reminders are on unless the user turned them off.
     if (prefs.enabled === false) return;
@@ -227,7 +252,7 @@ async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botTok
       else if (daysLeft === 0 && prefs.due !== false) type = "due_today";
       else if (daysLeft < 0 && prefs.overdue !== false) type = `overdue_${lastOverdueStep(-daysLeft)}`;
       if (!type) continue;
-      await deliver(String(debt.id), debt.due, type, debtReminderText(debt, remaining, daysLeft));
+      await deliver(String(debt.id), debt.due, type, debtReminderText(templates, debt, remaining, daysLeft));
     }
   }
 }
@@ -314,7 +339,10 @@ async function registerByContact(db: string, headers: Record<string, string>, su
   await restJson(`${db}/${TABLE}?on_conflict=user_id`, headers, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: userId, state: { ...DEFAULT_STATE, name }, telegram_chat_id: chatId, updated_at: new Date().toISOString() }) });
   await attachClickReferral(db, headers, userId, chatId, String(createdBody.created_at || new Date().toISOString()), botToken).catch(() => {});
   await reply("✅ Raqamingiz qabul qilindi.", { reply_markup: { remove_keyboard: true } });
-  return reply(`🎉 <b>Hisobingiz ochildi!</b>\n\nIlova bot ichida avtomatik kiradi — pastdagi tugmani bosing.\n\nBrauzerdan kirish uchun:\nLogin: <code>${login}</code>\nParol: <code>${password}</code>\n\nParolni unutsangiz, /parol deb yozing.\n\n${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
+  const created_text = tpl(await loadTemplates(db, headers), "account_created", { ism: name, login, parol: password });
+  // The login and password must reach the user even if the edited text dropped them.
+  const creds = created_text.includes(password) ? "" : `\n\nLogin: <code>${login}</code>\nParol: <code>${password}</code>`;
+  return reply(`${created_text}${creds}\n\n${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
 }
 const HELP_TEXT = [
   "✍️ <b>Kirim va xarajatni shu yerga yozing</b> — ilovani ochish shart emas.",
@@ -389,7 +417,7 @@ async function handleTelegramUpdate(update: any, supabaseUrl: string, serviceKey
     }
     const intro = invited ? "Siz do'stingiz taklifi bilan keldingiz 🎁\n\n" : "";
     const hasAccount = !!(await restJson(`${db}/${TABLE}?telegram_chat_id=eq.${encodeURIComponent(chatId)}&select=user_id&limit=1`, headers).catch(() => []))?.length;
-    if (!hasAccount) return reply(`👋 Assalomu alaykum!\n\n${intro}<b>Pulim</b> — kirim, xarajat va qarzlaringizni yuritish uchun bepul yordamchi.\n\nHisob ochish uchun pastdagi <b>📱 Raqamni yuborish</b> tugmasini bosing.`, { reply_markup: CONTACT_KEYBOARD });
+    if (!hasAccount) return reply(`${intro}${tpl(await loadTemplates(db, headers), "welcome", { ism: String(from.first_name || "").slice(0, 40) || "do'stim" })}`, { reply_markup: CONTACT_KEYBOARD });
     return reply(`👋 Assalomu alaykum!\n\n${intro}${HELP_TEXT}`, { reply_markup: { inline_keyboard: [APP_BUTTON] } });
   }
 
@@ -399,8 +427,8 @@ async function handleTelegramUpdate(update: any, supabaseUrl: string, serviceKey
     return reply("🔐 Sizda hali hisob yo'q.\n\nHisob ochish uchun pastdagi <b>📱 Raqamni yuborish</b> tugmasini bosing.", { reply_markup: CONTACT_KEYBOARD });
   }
   if (account.expires_at && Date.parse(account.expires_at) <= Date.now()) {
-    if (callback) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Obuna muddati tugagan", show_alert: true });
-    return reply("⛔️ Obuna muddati tugagan. Yangilash uchun yozing: @khrmnvccc");
+    if (callback) return tgCall(botToken, "answerCallbackQuery", { callback_query_id: callback.id, text: "Hisobingiz bloklangan", show_alert: true });
+    return reply("⛔️ Hisobingiz bloklangan. Savol bo'lsa, yozing: @khrmnvccc");
   }
 
   if (message && /^\/(parol|password)\b/i.test(text)) {
@@ -580,7 +608,7 @@ Deno.serve(async (req) => {
     const accountRows = await accountResponse.json();
     const expiresAt = accountRows[0]?.expires_at;
     if (expiresAt && Date.parse(expiresAt) <= Date.now()) {
-      return response({ ok: false, error: "Obuna muddati tugagan. Yangilash uchun Telegram orqali yozing: @khrmnvccc" }, 402);
+      return response({ ok: false, error: "Hisobingiz bloklangan. Savol bo'lsa, Telegram orqali yozing: @khrmnvccc" }, 402);
     }
 
     if (body.action === "load") {
@@ -646,111 +674,139 @@ Deno.serve(async (req) => {
     }
     if (String(body.action || "").startsWith("admin_")) {
       if (!(await isAdmin())) return response({ ok: false, error: "Bu bo‘lim faqat admin uchun." }, 403);
-      const authAdmin = `${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/users`;
-      const authHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+      const admin = authAdmin(supabaseUrl, serviceKey);
       const loginOf = (email: unknown) => String(email || "").split("@")[0];
       const listUsers = async () => {
         const users: any[] = [];
-        for (let page = 1; page <= 20; page++) {
-          const d = await restJson(`${authAdmin}?page=${page}&per_page=200`, authHeaders);
+        for (let page = 1; page <= 50; page++) {
+          const d = await restJson(`${admin.url}?page=${page}&per_page=200`, admin.headers);
           users.push(...(d?.users || []));
           if (!d?.users || d.users.length < 200) break;
         }
         return users;
       };
-      const expiryFrom = (value: unknown) => {
-        if (value === null || value === "") return null;
-        const day = String(value || "");
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) throw new Error("Sana noto‘g‘ri.");
-        return `${day}T23:59:59+05:00`;
-      };
-      const referralOf = async (id: string) => (await restJson(`${root}/${REFERRALS}?referred_user_id=eq.${encodeURIComponent(id)}&select=referrer_user_id,invitee_username,subscription_paid_at`, dbHeaders))?.[0] || null;
-      // Writes expires_at; the database triggers then credit the inviter's referral.
-      const setExpiry = async (id: string, expires: string | null, extra: Record<string, unknown> = {}) => {
-        const before = await referralOf(id);
-        await restJson(`${dbUrl}?on_conflict=user_id`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: id, expires_at: expires, updated_at: new Date().toISOString(), ...extra }) });
-        if (!botToken) return;
-        if (expires && Date.parse(expires) > Date.now()) {
-          await sendTelegram(botToken, await chatIdOf(id), `✅ <b>Obunangiz faollashtirildi</b>\n\nAmal qilish muddati: ${dmy(tashkentParts(new Date(expires)).day)} gacha.`);
-        }
-        const after = await referralOf(id);
-        if (after && !before?.subscription_paid_at && after.subscription_paid_at) {
-          await sendTelegram(botToken, await chatIdOf(after.referrer_user_id), `🎉 <b>Taklifingiz ishladi!</b>\n\n${html(after.invitee_username || "Do'stingiz")} obuna bo'ldi. Sizga ${som(REFERRAL_REWARD)} mukofot hisoblandi — tez orada kartangizga o'tkaziladi.`);
-        }
-      };
+      const target = String(body.targetUserId || "");
+      const needTarget = () => { if (!UUID_RE.test(target)) throw new Error("Foydalanuvchi aniqlanmadi."); };
+      const linkedChats = async () => ((await restJson(`${dbUrl}?telegram_chat_id=not.is.null&select=telegram_chat_id,expires_at`, dbHeaders)) || [])
+        .filter((a: any) => !(a.expires_at && Date.parse(a.expires_at) <= Date.now())).map((a: any) => String(a.telegram_chat_id));
+      const cleanText = (value: unknown) => { const t = String(value || "").trim(); if (!t) throw new Error("Matn yozing."); if (t.length > 3500) throw new Error("Matn juda uzun."); return t; };
       try {
         if (body.action === "admin_overview") {
-          const [users, accounts, referrals, admins] = await Promise.all([
+          const [users, accounts, admins, reminders] = await Promise.all([
             listUsers(),
-            restJson(`${dbUrl}?select=user_id,expires_at,telegram_chat_id,updated_at`, dbHeaders),
-            restJson(`${root}/${REFERRALS}?select=referrer_user_id,referred_user_id,invitee_username,clicked_at,subscription_paid_at,reward_paid_at&order=subscription_paid_at.desc.nullslast&limit=1000`, dbHeaders),
+            restJson(`${dbUrl}?select=user_id,expires_at,telegram_chat_id,updated_at,state`, dbHeaders),
             restJson(`${root}/${REFERRAL_ADMINS}?select=user_id`, dbHeaders),
+            restJson(`${root}/${REMINDERS}?sent_at=gte.${new Date(Date.now() - 7 * 864e5).toISOString()}&select=id&limit=100000`, dbHeaders).catch(() => []),
           ]);
           const byId = new Map<string, any>((accounts || []).map((a: any) => [a.user_id, a]));
-          const loginById = new Map<string, string>(users.map((u: any) => [u.id, loginOf(u.email)]));
-          const refById = new Map<string, any>((referrals || []).map((r: any) => [r.referred_user_id, r]));
           const adminIds = new Set((admins || []).map((a: any) => a.user_id));
-          return response({
-            ok: true,
-            reward: REFERRAL_REWARD,
-            users: users.map((u: any) => ({
+          const now = Date.now();
+          const remainingOf = (d: any) => Number(d?.amt) - (Array.isArray(d?.pays) ? d.pays.reduce((s: number, p: any) => s + Number(p?.a || 0), 0) : 0);
+          const rows = users.map((u: any) => {
+            const a = byId.get(u.id) || {};
+            const lastActive = [a.updated_at, u.last_sign_in_at].filter(Boolean).sort().pop() || null;
+            return {
               id: u.id,
               login: loginOf(u.email),
+              name: String(a.state?.name || u.user_metadata?.name || "").slice(0, 40),
               createdAt: u.created_at,
-              lastSignInAt: u.last_sign_in_at || null,
-              expiresAt: byId.get(u.id)?.expires_at || null,
-              telegram: !!byId.get(u.id)?.telegram_chat_id,
-              invitedBy: refById.has(u.id) ? loginById.get(refById.get(u.id).referrer_user_id) || "" : "",
+              lastActive,
+              telegram: !!a.telegram_chat_id,
+              blocked: !!(a.expires_at && Date.parse(a.expires_at) <= now),
               admin: adminIds.has(u.id),
-            })).sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt))),
-            payouts: (referrals || []).filter((r: any) => r.subscription_paid_at && !r.reward_paid_at).map((r: any) => ({
-              referredUserId: r.referred_user_id,
-              invitee: loginById.get(r.referred_user_id) || r.invitee_username,
-              referrer: loginById.get(r.referrer_user_id) || "",
-              paidAt: r.subscription_paid_at,
+              tx: Array.isArray(a.state?.tx) ? a.state.tx.length : 0,
+              debts: Array.isArray(a.state?.debts) ? a.state.debts.filter((d: any) => remainingOf(d) > 0.009).length : 0,
+            };
+          }).sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt)));
+          const within = (x: string | null, days: number) => !!x && now - Date.parse(x) < days * 864e5;
+          return response({
+            ok: true,
+            users: rows,
+            stats: {
+              users: rows.length,
+              activeToday: rows.filter((r: any) => within(r.lastActive, 1)).length,
+              active7: rows.filter((r: any) => within(r.lastActive, 7)).length,
+              new7: rows.filter((r: any) => within(r.createdAt, 7)).length,
+              telegram: rows.filter((r: any) => r.telegram && !r.blocked).length,
+              blocked: rows.filter((r: any) => r.blocked).length,
+              tx: rows.reduce((s: number, r: any) => s + r.tx, 0),
+              openDebts: rows.reduce((s: number, r: any) => s + r.debts, 0),
+              reminders7: (reminders || []).length,
+            },
+          });
+        }
+        if (body.action === "admin_set_password") {
+          needTarget();
+          const password = body.generate ? newPassword() : String(body.password || "");
+          if (password.length < 6 || password.length > 72) return response({ ok: false, error: "Parol kamida 6 belgi bo‘lsin." }, 400);
+          const r = await fetch(`${admin.url}/${target}`, { method: "PUT", headers: admin.headers, body: JSON.stringify({ password }) });
+          if (!r.ok) return response({ ok: false, error: "Parolni o‘zgartirib bo‘lmadi." }, 500);
+          const user = await restJson(`${admin.url}/${target}`, admin.headers).catch(() => null);
+          const sent = botToken ? await sendTelegram(botToken, await chatIdOf(target), `🔑 <b>Parolingiz yangilandi</b>\n\nLogin: <code>${html(loginOf(user?.email))}</code>\nParol: <code>${password}</code>`) : false;
+          return response({ ok: true, sent, password: sent ? undefined : password });
+        }
+        if (body.action === "admin_block") {
+          needTarget();
+          if (target === userId) return response({ ok: false, error: "O‘zingizni bloklay olmaysiz." }, 400);
+          await restJson(`${dbUrl}?user_id=eq.${encodeURIComponent(target)}`, dbHeaders, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ expires_at: body.block ? new Date().toISOString() : null }) });
+          return response({ ok: true });
+        }
+        if (body.action === "admin_message") {
+          needTarget();
+          if (!botToken) return response({ ok: false, error: "Bot sozlanmagan." }, 503);
+          const ok = await sendTelegram(botToken, await chatIdOf(target), renderTpl(cleanText(body.text), {}));
+          return ok ? response({ ok: true }) : response({ ok: false, error: "Xabar yetib bormadi (foydalanuvchi botni to‘xtatgan bo‘lishi mumkin)." }, 400);
+        }
+        if (body.action === "admin_broadcast") {
+          if (!botToken) return response({ ok: false, error: "Bot sozlanmagan." }, 503);
+          const text = renderTpl(cleanText(body.text), {});
+          if (body.test) {
+            const ok = await sendTelegram(botToken, await chatIdOf(userId), text);
+            return ok ? response({ ok: true, count: 1 }) : response({ ok: false, error: "Sizga yuborib bo‘lmadi. Botga /start yozing." }, 400);
+          }
+          const chats: string[] = [...new Set<string>(await linkedChats())];
+          const job = (async () => {
+            // Telegram allows about 30 messages a second; stay well below it.
+            for (let i = 0; i < chats.length; i += 20) {
+              await Promise.all(chats.slice(i, i + 20).map((c) => sendTelegram(botToken, c, text)));
+              await new Promise((r) => setTimeout(r, 1100));
+            }
+          })();
+          // deno-lint-ignore no-explicit-any
+          const runtime = (globalThis as any).EdgeRuntime;
+          if (runtime?.waitUntil) runtime.waitUntil(job.catch(() => {})); else await job;
+          return response({ ok: true, count: chats.length });
+        }
+        if (body.action === "admin_templates") {
+          const rows = await loadTemplates(root, dbHeaders);
+          return response({
+            ok: true,
+            templates: Object.entries(TEMPLATES).map(([key, t]) => ({
+              key, group: t.group, title: t.title, icon: t.icon, hint: t.hint, required: !!t.required, vars: t.vars, sample: t.sample,
+              default: t.text, text: rows[key]?.text?.trim() || t.text, custom: !!rows[key]?.text?.trim(), enabled: tplOn(rows, key),
             })),
           });
         }
-        if (body.action === "admin_create_user") {
-          const login = String(body.username || "").trim().toLowerCase();
-          const password = String(body.password || "");
-          if (!/^[a-z0-9_-]{3,32}$/.test(login)) return response({ ok: false, error: "Login 3–32 belgi: lotin harflari, raqam, _ yoki -." }, 400);
-          if (password.length < 6 || password.length > 72) return response({ ok: false, error: "Parol kamida 6 belgi bo‘lsin." }, 400);
-          const expires = expiryFrom(body.expiresAt);
-          const inviter = String(body.referrer || "").trim().toLowerCase();
-          let referrerId = "";
-          if (inviter) {
-            const found = (await listUsers()).find((u: any) => loginOf(u.email) === inviter);
-            if (!found) return response({ ok: false, error: `“${inviter}” loginli taklifchi topilmadi.` }, 404);
-            referrerId = found.id;
-          }
-          const created = await fetch(authAdmin, { method: "POST", headers: authHeaders, body: JSON.stringify({ email: `${login}@${LOGIN_DOMAIN}`, password, email_confirm: true }) });
-          const createdBody = await created.json().catch(() => ({}));
-          if (!created.ok) return response({ ok: false, error: /already|exists|registered/i.test(JSON.stringify(createdBody)) ? "Bu login band." : "Foydalanuvchini yaratib bo‘lmadi." }, 400);
-          const newId = createdBody.id || createdBody.user?.id;
-          if (referrerId && referrerId !== newId) {
-            await restJson(`${root}/${REFERRALS}`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=minimal" }, body: JSON.stringify({ referrer_user_id: referrerId, referred_user_id: newId, invitee_username: login, clicked_at: new Date().toISOString() }) });
-          }
-          await setExpiry(newId, expires, { state: { ...DEFAULT_STATE, name: login } });
-          return response({ ok: true, id: newId, login });
-        }
-        if (body.action === "admin_set_expiry") {
-          const target = String(body.targetUserId || "");
-          if (!UUID_RE.test(target)) return response({ ok: false, error: "Foydalanuvchi aniqlanmadi." }, 400);
-          await setExpiry(target, body.block ? new Date().toISOString() : expiryFrom(body.expiresAt));
+        if (body.action === "admin_template_save") {
+          const key = String(body.key || "");
+          if (!TEMPLATES[key]) return response({ ok: false, error: "Shablon topilmadi." }, 404);
+          const text = String(body.text || "").trim();
+          if (text.length > 3500) return response({ ok: false, error: "Matn juda uzun." }, 400);
+          if (key === "account_created" && text && !text.includes("{{parol}}")) return response({ ok: false, error: "Matnda {{parol}} bo‘lishi shart." }, 400);
+          await restJson(`${root}/${TEMPLATE_TABLE}?on_conflict=key`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key, enabled: TEMPLATES[key].required ? true : body.enabled !== false, text, updated_at: new Date().toISOString() }) });
           return response({ ok: true });
         }
-        if (body.action === "admin_set_password") {
-          const target = String(body.targetUserId || "");
-          const password = String(body.password || "");
-          if (!UUID_RE.test(target)) return response({ ok: false, error: "Foydalanuvchi aniqlanmadi." }, 400);
-          if (password.length < 6 || password.length > 72) return response({ ok: false, error: "Parol kamida 6 belgi bo‘lsin." }, 400);
-          const r = await fetch(`${authAdmin}/${target}`, { method: "PUT", headers: authHeaders, body: JSON.stringify({ password }) });
-          if (!r.ok) return response({ ok: false, error: "Parolni o‘zgartirib bo‘lmadi." }, 500);
-          return response({ ok: true });
+        if (body.action === "admin_template_test") {
+          const key = String(body.key || "");
+          const t = TEMPLATES[key];
+          if (!t) return response({ ok: false, error: "Shablon topilmadi." }, 404);
+          if (!botToken) return response({ ok: false, error: "Bot sozlanmagan." }, 503);
+          const text = String(body.text || "").trim() || t.text;
+          const ok = await sendTelegram(botToken, await chatIdOf(userId), renderTpl(text.slice(0, 3500), t.sample));
+          return ok ? response({ ok: true }) : response({ ok: false, error: "Sizga yuborib bo‘lmadi. Botga /start yozing." }, 400);
         }
       } catch (e) {
-        return response({ ok: false, error: e instanceof Error && /Sana/.test(e.message) ? e.message : "Admin amalini bajarib bo‘lmadi." }, 400);
+        return response({ ok: false, error: e instanceof Error && /^[^A-Za-z]|Matn|Foydalanuvchi/.test(e.message) ? e.message : "Admin amalini bajarib bo‘lmadi." }, 400);
       }
       return response({ ok: false, error: "Invalid request" }, 400);
     }
@@ -758,7 +814,7 @@ Deno.serve(async (req) => {
       if (!botToken) return response({ ok: false, error: "Telegram bot serverda sozlanmagan." }, 503);
       const chat = accountRows[0]?.telegram_chat_id;
       if (!chat) return response({ ok: false, error: "Telegram ulanmagan. Ilovani bot ichida oching." }, 400);
-      const ok = await sendTelegram(botToken, chat, "🔔 <b>Sinov eslatmasi</b>\n\nHammasi joyida — qarz muddatlari yaqinlashganda shu yerga xabar keladi.");
+      const ok = await sendTelegram(botToken, chat, tpl(await loadTemplates(root, dbHeaders), "test_reminder", {}));
       if (!ok) return response({ ok: false, error: "Bot xabar yubora olmadi. Botga /start yuboring va qayta urinib ko'ring." }, 400);
       return response({ ok: true });
     }
