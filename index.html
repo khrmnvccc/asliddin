@@ -110,6 +110,16 @@ nav .fab{order:9;margin-top:10px;color:#fff;background:linear-gradient(145deg,#1
 .tg-prev{padding:14px;margin:4px 0 12px;border-radius:20px;background:color-mix(in srgb,var(--ac) 10%,var(--bg))}
 .tg-bubble{max-width:92%;padding:10px 12px;border-radius:16px 16px 16px 4px;background:var(--card);box-shadow:var(--sh);font-size:14px;line-height:1.45;word-wrap:break-word}
 .stat .tr2 small{font-weight:500;opacity:.8}
+.pk.dp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238a9d93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E")}
+.pk.empty span{color:var(--mu)}
+.dp-nav{display:flex;align-items:center;justify-content:space-between;padding:0 4px 8px}.dp-nav b{font-size:16px}
+.dp-nav button{width:42px;height:42px;border-radius:13px;border:1px solid var(--br);background:var(--bg);display:grid;place-items:center;cursor:pointer}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.dp-wd span{font-size:11px;font-weight:700;color:var(--mu);padding:4px 0}
+.dp-grid button{aspect-ratio:1;border:0;border-radius:12px;background:none;font-size:15px;font-weight:500;cursor:pointer}
+.dp-grid button:hover{background:var(--bg)}
+.dp-grid .today{box-shadow:inset 0 0 0 1.5px var(--ac);color:var(--ac);font-weight:700}
+.dp-grid .on{background:var(--ac);color:#fff;font-weight:700;box-shadow:none}
 </style></head><body><div id="app"></div>
 <nav aria-label="Asosiy navigatsiya" hidden><button data-v="home"><i data-lucide="home" class="ic"></i><span>Bosh</span></button><button data-v="rep"><i data-lucide="bar-chart-3" class="ic"></i><span>Hisobot</span></button><button class="fab" aria-label="Qo'shish" onclick="txForm()"><i data-lucide="plus" class="ic"></i><span>Qo'shish</span></button><button data-v="debts"><i data-lucide="handshake" class="ic"></i><span>Qarzlar</span></button><button data-v="more"><i data-lucide="menu" class="ic"></i><span>Ko'proq</span></button></nav>
 <dialog id="dlg"></dialog><div id="toast" popover="manual" role="status"></div>
@@ -289,7 +299,20 @@ function pkEnhance(root){(root.querySelectorAll?root:document).querySelectorAll(
 function pkOpen(s){let d=$('#pkDlg');if(!d){d=document.createElement('dialog');d.id='pkDlg';d.className='pk-dlg';d.onclick=e=>{if(e.target==d)d.close()};document.body.append(d)}
 d.innerHTML=`<div class="pk-head">${esc(pkLabel(s))}</div><div class="pk-list">${[...s.options].map((o,i)=>`<button type="button" class="${i==s.selectedIndex?'on':''}" data-i="${i}"><span>${esc(o.text)}</span>${i==s.selectedIndex?ic('check'):''}</button>`).join('')}</div>`;
 d.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{s.selectedIndex=+b.dataset.i;pkSync(s);s.dispatchEvent(new Event('change',{bubbles:true}));d.close()});d.showModal();if(window.lucide)lucide.createIcons();d.querySelector('.on')?.scrollIntoView({block:'center'})}
-let pkQ=0;new MutationObserver(()=>{if(!pkQ)pkQ=requestAnimationFrame(()=>{pkQ=0;pkEnhance(document)})}).observe(document.documentElement,{childList:true,subtree:true});
+// Ilova uslubidagi kalendar: telefonning oq (va ruscha) sana oynasi o‘rniga.
+const DP_M=['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+const dpIso=(y,m,d)=>`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+const dpToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent'}).format(new Date());
+function dpSync(i){const b=i._dp;if(!b)return;const v=i.value;b.querySelector('span').textContent=v?v.split('-').reverse().join('.'):(i.getAttribute('placeholder')||'Sana tanlanmagan');b.classList.toggle('empty',!v)}
+function dpEnhance(){document.querySelectorAll('input[type=date]:not([data-dp])').forEach(i=>{i.dataset.dp=1;const b=document.createElement('button');b.type='button';b.className='pk dp';b.style.cssText=i.style.cssText;b.innerHTML='<span></span>';b.onclick=()=>dpOpen(i);i._dp=b;i.classList.add('pk-src');i.after(b);i.addEventListener('change',()=>dpSync(i));dpSync(i)})}
+function dpOpen(i,ym){let d=$('#dpDlg');if(!d){d=document.createElement('dialog');d.id='dpDlg';d.className='pk-dlg';d.onclick=e=>{if(e.target==d)d.close()};document.body.append(d)}
+const sel=i.value,base=ym||(sel||dpToday()).slice(0,7),[y,m]=base.split('-').map(Number),first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7,days=new Date(Date.UTC(y,m,0)).getUTCDate(),t=dpToday();
+let cells='';for(let k=0;k<first;k++)cells+='<span></span>';for(let k=1;k<=days;k++){const v=dpIso(y,m-1,k);cells+=`<button type="button" data-v="${v}" class="${v==sel?'on':''} ${v==t?'today':''}">${k}</button>`}
+const prev=dpIso(m==1?y-1:y,m==1?11:m-2,1).slice(0,7),next=dpIso(m==12?y+1:y,m==12?0:m,1).slice(0,7);
+d.innerHTML=`<div class="pk-head">${esc(pkLabel(i))}</div><div class="dp-nav"><button type="button" data-ym="${prev}">${ic('chevron-left')}</button><b>${DP_M[m-1]} ${y}</b><button type="button" data-ym="${next}">${ic('chevron-right')}</button></div><div class="dp-grid dp-wd">${['Du','Se','Ch','Pa','Ju','Sh','Ya'].map(x=>`<span>${x}</span>`).join('')}</div><div class="dp-grid">${cells}</div><div class="row" style="margin-top:12px">${i.required?'':`<button type="button" class="btn g" data-v="">Tozalash</button>`}<button type="button" class="btn g" data-v="${t}">Bugun</button></div>`;
+const pick=v=>{i.value=v;dpSync(i);i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new Event('change',{bubbles:true}));d.close()};
+d.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>pick(b.dataset.v));d.querySelectorAll('[data-ym]').forEach(b=>b.onclick=()=>dpOpen(i,b.dataset.ym));if(!d.open)d.showModal();if(window.lucide)lucide.createIcons()}
+let pkQ=0;new MutationObserver(()=>{if(!pkQ)pkQ=requestAnimationFrame(()=>{pkQ=0;pkEnhance(document);dpEnhance()})}).observe(document.documentElement,{childList:true,subtree:true});
 function botHelp(){open_(`<h3>Botga yozib qo‘shish</h3><p class="mu">Ilovani ochmasdan, botning o‘ziga yozing — yozuv shu yerga avtomatik tushadi.</p><div class="card" style="box-shadow:none"><div class="row sp"><code>50000 taksi</code><span class="mu">xarajat</span></div><div class="row sp"><code>35k ovqat</code><span class="mu">35 000 so‘m</span></div><div class="row sp"><code>+4.5mln oylik</code><span class="mu">kirim</span></div><div class="row sp"><code>$20 kafe</code><span class="mu">dollarda</span></div><div class="row sp"><code>kecha 120000 benzin</code><span class="mu">kechagi sana</span></div></div><p class="mu">💳 Bank yoki CardXabar xabarini botga <b>forward</b> qiling — summa va kirim/chiqim o‘zi aniqlanadi. Har bir yozuv ostida “Bekor qilish” tugmasi bor.</p><p class="mu">${TG_LINKED?'✓ Telegram hisobingiz ulangan.':'Telegram hali ulanmagan: ilovani bot ichidan oching — avtomatik ulanadi.'}</p><button class="btn" style="width:100%" onclick="TG?.close?TG.close():$('#dlg').close()">${ic('send')} Botga o‘tish</button>`)}
 // Bot entries can arrive while the app sits in the background: refresh when it comes back.
 let hiddenAt=0;document.addEventListener('visibilitychange',async()=>{if(document.hidden){hiddenAt=Date.now();return}if(!accountReady||!hiddenAt||Date.now()-hiddenAt<15000||$('#dlg')?.open)return;try{await cloudQueue;const d=await cloudCall('load');if($('#dlg')?.open)return;S=Object.assign({tx:[],debts:[],cats:[],rate:12500,init:0,name:S.name,theme:''},d.state||{});LOADED_AT=Number(d.serverTime)||Date.now();render(true)}catch{}});
