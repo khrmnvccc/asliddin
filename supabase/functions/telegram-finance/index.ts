@@ -149,8 +149,10 @@ function html(value: unknown) {
 }
 
 // Overdue debts are reminded 1, 3 and 7 days after the due date, then every 7 days.
-function overdueStep(daysLate: number) {
-  return daysLate === 1 || daysLate === 3 || (daysLate >= 7 && daysLate % 7 === 0);
+// Returns the latest step reached, so each step is sent once even if a day was missed.
+function lastOverdueStep(daysLate: number) {
+  if (daysLate >= 7) return Math.min(9999, Math.floor(daysLate / 7) * 7);
+  return daysLate >= 3 ? 3 : 1;
 }
 
 function debtReminderText(debt: any, remaining: number, daysLeft: number) {
@@ -169,11 +171,18 @@ function debtReminderText(debt: any, remaining: number, daysLeft: number) {
 async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botToken: string) {
   const db = `${supabaseUrl.replace(/\/$/, "")}/rest/v1`;
   const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
-  const accounts = await restJson(`${db}/${TABLE}?telegram_chat_id=not.is.null&select=user_id,state,telegram_chat_id,reminders_enabled,expires_at`, headers);
+  const accounts = await restJson(`${db}/${TABLE}?telegram_chat_id=not.is.null&select=user_id,state,telegram_chat_id,expires_at`, headers);
   const now = tashkentParts();
   const todayUtc = Date.parse(`${now.day}T00:00:00Z`);
   let sent = 0;
-  for (const account of accounts || []) {
+  const list: any[] = accounts || [];
+  // A few accounts at a time so one hourly run finishes quickly even with many users.
+  for (let i = 0; i < list.length; i += 8) {
+    await Promise.all(list.slice(i, i + 8).map((account) => remindAccount(account).catch(() => {})));
+  }
+  return sent;
+
+  async function remindAccount(account: any) {
     const prefs = account.state?.reminderPrefs || {};
     const deliveries = new Set<string>();
     const loadDeliveries = async () => {
@@ -202,24 +211,25 @@ async function sendDebtReminders(supabaseUrl: string, serviceKey: string, botTok
       }
     }
 
-    if (!account.reminders_enabled || !prefs.enabled) continue;
+    // Reminders are on unless the user turned them off.
+    if (prefs.enabled === false) return;
     // Send at the chosen hour, or later the same day if that hourly run was missed.
-    if (now.hour < Number(String(prefs.time || "09:00").slice(0, 2))) continue;
+    if (now.hour < Number(String(prefs.time || "09:00").slice(0, 2))) return;
     for (const debt of account.state?.debts || []) {
       if (!debt?.id || !/^\d{4}-\d{2}-\d{2}$/.test(String(debt.due || "")) || !Array.isArray(debt.pays)) continue;
       const remaining = Number(debt.amt) - debt.pays.reduce((total: number, payment: any) => total + Number(payment?.a || 0), 0);
       if (!(remaining > 0.009)) continue;
       const daysLeft = Math.round((Date.parse(`${debt.due}T00:00:00Z`) - todayUtc) / 86400000);
+      // Windows instead of exact days, so a missed hourly run (or a debt added late) still gets its reminder once.
       let type = "";
-      if (daysLeft === 3 && prefs.before !== false) type = "before_3_days";
+      if (daysLeft >= 2 && daysLeft <= 3 && prefs.before !== false) type = "before_3_days";
       else if (daysLeft === 1 && prefs.before !== false) type = "before_1_day";
       else if (daysLeft === 0 && prefs.due !== false) type = "due_today";
-      else if (daysLeft < 0 && prefs.overdue !== false && overdueStep(-daysLeft)) type = `overdue_${-daysLeft}`;
+      else if (daysLeft < 0 && prefs.overdue !== false) type = `overdue_${lastOverdueStep(-daysLeft)}`;
       if (!type) continue;
       await deliver(String(debt.id), debt.due, type, debtReminderText(debt, remaining, daysLeft));
     }
   }
-  return sent;
 }
 
 async function webhookSecret(botToken: string) {
@@ -512,7 +522,11 @@ Deno.serve(async (req) => {
       if (origin || !serviceKey || !supabaseUrl) return response({ ok: false, error: "Forbidden" }, 403);
       if (!(await cronAllowed(req.headers.get("authorization") || "", supabaseUrl, serviceKey))) return response({ ok: false, error: "Forbidden" }, 403);
       if (!botToken) return response({ ok: false, error: "Reminder secrets are not configured" }, 503);
-      return response({ ok: true, sent: await sendDebtReminders(supabaseUrl, serviceKey, botToken) });
+      const job = sendDebtReminders(supabaseUrl, serviceKey, botToken);
+      // deno-lint-ignore no-explicit-any
+      const runtime = (globalThis as any).EdgeRuntime;
+      if (runtime?.waitUntil) { runtime.waitUntil(job.catch(() => 0)); return response({ ok: true, started: true }); }
+      return response({ ok: true, sent: await job });
     }
     if (origin !== SITE_ORIGIN) return response({ ok: false, error: "Forbidden" }, 403);
     if (body.action === "referral_click") {
@@ -739,6 +753,14 @@ Deno.serve(async (req) => {
         return response({ ok: false, error: e instanceof Error && /Sana/.test(e.message) ? e.message : "Admin amalini bajarib bo‘lmadi." }, 400);
       }
       return response({ ok: false, error: "Invalid request" }, 400);
+    }
+    if (body.action === "test_reminder") {
+      if (!botToken) return response({ ok: false, error: "Telegram bot serverda sozlanmagan." }, 503);
+      const chat = accountRows[0]?.telegram_chat_id;
+      if (!chat) return response({ ok: false, error: "Telegram ulanmagan. Ilovani bot ichida oching." }, 400);
+      const ok = await sendTelegram(botToken, chat, "🔔 <b>Sinov eslatmasi</b>\n\nHammasi joyida — qarz muddatlari yaqinlashganda shu yerga xabar keladi.");
+      if (!ok) return response({ ok: false, error: "Bot xabar yubora olmadi. Botga /start yuboring va qayta urinib ko'ring." }, 400);
+      return response({ ok: true });
     }
     if (body.action === "link_telegram") {
       if (!botToken) return response({ ok: false, error: "Telegram bot serverda sozlanmagan." }, 503);
