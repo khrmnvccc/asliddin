@@ -7,7 +7,7 @@ const REFERRAL_CODES = "finance_referral_codes";
 const REFERRALS = "finance_referrals";
 const REFERRAL_ADMINS = "finance_referral_payout_admins";
 // Bump APP_VERSION on each site release: a new URL makes Telegram load the fresh page instead of its cached copy.
-const APP_VERSION = "20261125c";
+const APP_VERSION = "20261125d";
 const APP_URL = `${Deno.env.get("APP_URL") || "https://khrmnvccc.github.io/asliddin/"}?v=${APP_VERSION}`;
 const LOGIN_DOMAIN = "khrmnvccc.github.io";
 const REFERRAL_REWARD = 10000;
@@ -182,6 +182,17 @@ async function loadTemplates(db: string, headers: Record<string, string>): Promi
     const rows = await restJson(`${db}/${TEMPLATE_TABLE}?select=key,enabled,text`, headers);
     return Object.fromEntries((rows || []).map((r: any) => [r.key, { enabled: r.enabled !== false, text: String(r.text || "") }]));
   } catch { return {}; }
+}
+// In-app guided tour ("Yo'l-yo'riq"). Stored as JSON in bot_templates; the app holds the default steps.
+const TOUR_KEY = "app_tour";
+const TOUR_VIEWS = ["home", "debts", "rep", "more"];
+async function loadTour(db: string, headers: Record<string, string>) {
+  try {
+    const rows = await restJson(`${db}/${TEMPLATE_TABLE}?key=eq.${TOUR_KEY}&select=enabled,text`, headers);
+    if (!rows?.[0]?.text) return null;
+    const t = JSON.parse(rows[0].text);
+    return { enabled: rows[0].enabled !== false, version: Number(t.version) || 1, steps: Array.isArray(t.steps) ? t.steps : [] };
+  } catch { return null; }
 }
 function tplOn(rows: TemplateRows, key: string) { return !!TEMPLATES[key]?.required || rows[key]?.enabled !== false; }
 function renderTpl(text: string, vars: Record<string, string>) {
@@ -634,7 +645,7 @@ Deno.serve(async (req) => {
       const r = await fetch(`${dbUrl}?user_id=eq.${encodeURIComponent(userId)}&select=state`, { headers: dbHeaders });
       if (!r.ok) return response({ ok: false, error: "Could not load account" }, 500);
       const rows = await r.json();
-      return response({ ok: true, state: rows[0]?.state ?? DEFAULT_STATE, telegramLinked: !!accountRows[0]?.telegram_chat_id, isAdmin: await isAdmin(), serverTime: Date.now() });
+      return response({ ok: true, state: rows[0]?.state ?? DEFAULT_STATE, telegramLinked: !!accountRows[0]?.telegram_chat_id, isAdmin: await isAdmin(), tour: await loadTour(root, dbHeaders), serverTime: Date.now() });
     }
     if (body.action === "referrals") {
       let own = await restJson(`${root}/${REFERRAL_CODES}?user_id=eq.${encodeURIComponent(userId)}&select=code`, dbHeaders);
@@ -798,6 +809,20 @@ Deno.serve(async (req) => {
           if (key === "account_created" && text && !text.includes("{{parol}}")) return response({ ok: false, error: "Matnda {{parol}} bo‘lishi shart." }, 400);
           await restJson(`${root}/${TEMPLATE_TABLE}?on_conflict=key`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key, enabled: TEMPLATES[key].required ? true : body.enabled !== false, text, updated_at: new Date().toISOString() }) });
           return response({ ok: true });
+        }
+        if (body.action === "admin_tour_save") {
+          // deno-lint-ignore no-explicit-any
+          const steps = (Array.isArray(body.steps) ? body.steps : []).slice(0, 30).map((x: any) => ({
+            view: TOUR_VIEWS.includes(x?.view) ? x.view : "home",
+            sel: String(x?.sel || "").slice(0, 120),
+            badge: ["act", "watch", "opt"].includes(x?.badge) ? x.badge : "",
+            title: String(x?.title || "").trim().slice(0, 80),
+            text: String(x?.text || "").trim().slice(0, 400),
+          })).filter((x: { title: string; text: string }) => x.title || x.text);
+          const old = await loadTour(root, dbHeaders);
+          const version = (old?.version || 1) + (body.reset ? 1 : 0);
+          await restJson(`${root}/${TEMPLATE_TABLE}?on_conflict=key`, dbHeaders, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ key: TOUR_KEY, enabled: body.enabled !== false, text: JSON.stringify({ version, steps }), updated_at: new Date().toISOString() }) });
+          return response({ ok: true, version });
         }
         if (body.action === "admin_template_test") {
           const key = String(body.key || "");
