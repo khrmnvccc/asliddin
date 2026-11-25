@@ -6,7 +6,9 @@ const REMINDERS = "debt_reminder_deliveries";
 const REFERRAL_CODES = "finance_referral_codes";
 const REFERRALS = "finance_referrals";
 const REFERRAL_ADMINS = "finance_referral_payout_admins";
-const APP_URL = Deno.env.get("APP_URL") || "https://khrmnvccc.github.io/asliddin/";
+// Bump APP_VERSION on each site release: a new URL makes Telegram load the fresh page instead of its cached copy.
+const APP_VERSION = "20261125b";
+const APP_URL = `${Deno.env.get("APP_URL") || "https://khrmnvccc.github.io/asliddin/"}?v=${APP_VERSION}`;
 const LOGIN_DOMAIN = "khrmnvccc.github.io";
 const REFERRAL_REWARD = 10000;
 const DEFAULT_STATE = { tx: [], debts: [], cats: [], rate: 12500, init: 0, name: "", theme: "" };
@@ -538,6 +540,7 @@ Deno.serve(async (req) => {
       if (origin || !serviceKey || !supabaseUrl || !botToken) return response({ ok: false, error: "Forbidden" }, 403);
       if (!(await cronAllowed(req.headers.get("authorization") || "", supabaseUrl, serviceKey))) return response({ ok: false, error: "Forbidden" }, 403);
       const url = `${supabaseUrl.replace(/\/$/, "")}/functions/v1/telegram-finance`;
+      if (body.menu) await tgCall(botToken, "setChatMenuButton", { menu_button: { type: "web_app", text: "Ilova", web_app: { url: APP_URL } } });
       const info = await tgCall(botToken, "getWebhookInfo", {});
       const current = info?.result?.url || "";
       if (body.mode !== "set" || (current && current !== url && !body.force)) return response({ ok: true, changed: false, current, pending: info?.result?.pending_update_count ?? null, lastError: info?.result?.last_error_message || null });
