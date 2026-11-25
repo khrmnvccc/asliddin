@@ -7,7 +7,7 @@ const REFERRAL_CODES = "finance_referral_codes";
 const REFERRALS = "finance_referrals";
 const REFERRAL_ADMINS = "finance_referral_payout_admins";
 // Bump APP_VERSION on each site release: a new URL makes Telegram load the fresh page instead of its cached copy.
-const APP_VERSION = "20261125e";
+const APP_VERSION = "20261125f";
 const APP_URL = `${Deno.env.get("APP_URL") || "https://khrmnvccc.github.io/asliddin/"}?v=${APP_VERSION}`;
 const LOGIN_DOMAIN = "khrmnvccc.github.io";
 const REFERRAL_REWARD = 10000;
